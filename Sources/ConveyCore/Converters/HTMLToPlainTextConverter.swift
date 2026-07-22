@@ -1,0 +1,18 @@
+public struct HTMLToPlainTextConverter: Converter {
+    public let from: Format = .html
+    public let to: Format = .plainText
+    private let runtime: WebRuntime
+
+    public init(runtime: WebRuntime) { self.runtime = runtime }
+
+    public func convert(_ input: Payload) async throws -> Payload {
+        guard case let .text(html) = input else {
+            throw ConversionError.wrongPayload(expected: "text")
+        }
+        let result = try await runtime.call("return window.htmlToPlainText(html);", arguments: ["html": html])
+        guard let text = result as? String else {
+            throw ConversionError.engineFailed("htmlToPlainText")
+        }
+        return .text(text)
+    }
+}
