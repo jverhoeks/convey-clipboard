@@ -11,8 +11,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let history = HistoryStore()
     private let convey = Convey()
     private var hotKey: HotKey?
+    private let monitor = ClipboardMonitor()
+    private let persistence = HistoryPersistence(directory: HistoryPersistence.defaultDirectory)
+    private var pollTimer: Timer?
+    private var lastChangeCount = NSPasteboard.general.changeCount
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        history.replaceAll(persistence.load())
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
+            // Timer fires on the main run loop, so it's safe to hop to the MainActor
+            // synchronously here to call the MainActor-isolated pollClipboard().
+            MainActor.assumeIsolated {
+                self?.pollClipboard()
+            }
+        }
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             let image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "Convey")
@@ -65,5 +78,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    private func pollClipboard() {
+        let pb = NSPasteboard.general
+        guard pb.changeCount != lastChangeCount else { return }
+        lastChangeCount = pb.changeCount
+        guard let entry = monitor.makeEntry(from: SystemPasteboard(pb), id: UUID(), now: Date()) else { return }
+        history.add(entry)
+        try? persistence.save(history.entries)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        try? persistence.save(history.entries)
     }
 }
