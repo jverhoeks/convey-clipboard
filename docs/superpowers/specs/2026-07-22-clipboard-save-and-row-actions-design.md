@@ -111,9 +111,9 @@ all row controls behave consistently.
 - `HistoryStore.remove(id: UUID)` — removes the matching entry from `entries`.
   Pure list op, unit-testable.
 - `EntryRowView` gains `onDelete: (ClipboardEntry) -> Void`.
-- The delete control is the **circular close button (`xmark` in a circle)** in the
-  card's top-right corner (see Visual design), styled with `RowActionButtonStyle`.
-  It is normally dim and brightens on hover.
+- The delete control is a **trash icon (`trash` SF Symbol)** in the card's
+  top-right corner (see Visual design), styled with `RowActionButtonStyle`. It is
+  normally dim and brightens (red tint) on hover.
 - `AppDelegate` implements delete: `history.remove(id:)`, then persist the new
   snapshot on the existing `saveQueue` (same pattern as `pollClipboard`).
 - No confirmation dialog — deleting a history entry is low-stakes and cheap.
@@ -134,7 +134,7 @@ Notification Center list.
 - Left: the kind badge as a bold **title** (e.g. **HTML**, **Image**).
 - Right: a timestamp caption from `createdAt`, formatted `HH:mm` (secondary
   color).
-- Far right: the circular **×** close button (delete), dim → bright on hover.
+- Far right: the **trash** icon (delete), dim → bright (red) on hover.
 
 **Body**
 - Preview text (secondary color, `lineLimit(2)`) or the image thumbnail, as today.
@@ -157,7 +157,7 @@ Notification Center list.
 
 ```
 ┌───────────────────────────────────────────┐
-│  HTML                        21:57    ( × ) │   title · time · delete
+│  HTML                        21:57    🗑     │   title · time · delete
 │  preview text / image thumbnail…            │
 │  HTML · TEXT                                │   source caption
 │  → markdown   → plainText                   │   convert (hover)
