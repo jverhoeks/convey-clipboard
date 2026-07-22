@@ -121,9 +121,19 @@ testable.
 - **Triggers (both, sharing one picker):**
   - Menu-bar `NSStatusItem` (`LSUIElement`, no dock icon) — click to open.
   - Global hotkey **⌥⌘V** — opens the same picker panel.
-- **Picker panel:** current clipboard at the top with its valid conversions,
-  then a scrollable **history** of recent copies. Any past item can be
-  converted, not just the current one.
+- **Picker panel (confirmed layout):** a **visual scrollable list** of
+  clipboard entries — the current clipboard pinned at the top, then the
+  **history** of recent copies. Each row shows:
+  - a **type badge** (HTML / RTF / Markdown / image / Mermaid / plain text),
+  - a **preview** of the entry's content — a truncated text snippet for
+    text-like flavors, a thumbnail for images, the rendered diagram for
+    Mermaid/SVG,
+  - the **convert options** valid for that entry (the buttons/menu produced by
+    `graph.validTargets(from:)`), so any entry — current or historical — can be
+    converted in place, not just the current clipboard item.
+  Selecting a convert option rewrites the clipboard to the chosen target
+  (ready to ⌘V). Previews must be **concealed-type aware**: entries marked
+  `org.nspasteboard.ConcealedType` are never previewed or stored (see Privacy).
 - **History store:** capped ring buffer (count + total-size limits), persisted
   to Application Support, with a clear-on-quit option.
 - **Privacy:** honor the `org.nspasteboard.ConcealedType` and
