@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Carbon.HIToolbox
 import ConveyCore
 import ConveyKit
 
@@ -9,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let popover = NSPopover()
     let history = HistoryStore()
     private let convey = Convey()
+    private var hotKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -22,6 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 380, height: 480)
         popover.contentViewController = makePickerController()
+
+        // ⌥⌘V — keyCode 9 is 'v'; modifiers optionKey | cmdKey.
+        hotKey = HotKey(keyCode: UInt32(kVK_ANSI_V),
+                        modifiers: UInt32(optionKey | cmdKey)) { [weak self] in
+            self?.togglePopover()
+        }
     }
 
     private func makePickerController() -> NSViewController {
