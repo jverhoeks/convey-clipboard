@@ -51,7 +51,11 @@ func run() async -> Int32 {
 
         do {
             let result = try await Convey().convert(input, from: from, to: to)
-            if stdinText != nil, case let .text(out) = result {
+            // Route by whether stdin was actually USED as input, not merely present:
+            // img2b64 reads the image from the clipboard even if stdin is piped, so
+            // stdin-presence alone would misroute its data-URI to stdout.
+            let usedStdin = (stdinText != nil && from != .image)
+            if usedStdin, case let .text(out) = result {
                 print(out)
             } else {
                 PasteboardWriter().write(result, as: to, to: .general)
