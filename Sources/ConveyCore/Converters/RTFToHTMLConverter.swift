@@ -19,12 +19,17 @@ public struct RTFToHTMLConverter: Converter {
             ) else {
                 throw ConversionError.engineFailed("rtf parse")
             }
-            let htmlData = try attributed.data(
-                from: NSRange(location: 0, length: attributed.length),
-                documentAttributes: [.documentType: NSAttributedString.DocumentType.html]
-            )
-            guard let html = String(data: htmlData, encoding: .utf8) else {
+            let htmlData: Data
+            do {
+                htmlData = try attributed.data(
+                    from: NSRange(location: 0, length: attributed.length),
+                    documentAttributes: [.documentType: NSAttributedString.DocumentType.html]
+                )
+            } catch {
                 throw ConversionError.engineFailed("html encode")
+            }
+            guard let html = String(data: htmlData, encoding: .utf8) else {
+                throw ConversionError.engineFailed("html decode")
             }
             return Payload.text(html)
         }
