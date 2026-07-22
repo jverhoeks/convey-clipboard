@@ -1,3 +1,7 @@
-import Foundation
+import AppKit
 
-// placeholder, replaced in Task 6
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory) // menu-bar only, no dock icon
+app.run()
