@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let persistence = HistoryPersistence(directory: HistoryPersistence.defaultDirectory)
     private var pollTimer: Timer?
     private var lastChangeCount = NSPasteboard.general.changeCount
+    private let saveQueue = DispatchQueue(label: "convey.history.save")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         history.replaceAll(persistence.load())
@@ -84,10 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastChangeCount = pb.changeCount
         guard let entry = monitor.makeEntry(from: SystemPasteboard(pb), id: UUID(), now: Date()) else { return }
         history.add(entry)
-        try? persistence.save(history.entries)
+        let snapshot = history.entries
+        let persistence = self.persistence
+        saveQueue.async { try? persistence.save(snapshot) }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        try? persistence.save(history.entries)
+        saveQueue.sync { try? self.persistence.save(self.history.entries) }
     }
 }
