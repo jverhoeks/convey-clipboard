@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ConveyCore
 import ConveyKit
@@ -7,6 +8,7 @@ struct PickerView: View {
     let targetsFor: (ClipboardEntry) -> [Format]
     let onConvert: (ClipboardEntry, Format) -> Void
     let onClear: () -> Void
+    let renderMermaid: (ClipboardEntry) async -> NSImage?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,7 +30,8 @@ struct PickerView: View {
                         EntryRowView(
                             entry: entry,
                             targets: targetsFor(entry),
-                            onConvert: onConvert
+                            onConvert: onConvert,
+                            renderMermaid: renderMermaid
                         )
                     }
                 }

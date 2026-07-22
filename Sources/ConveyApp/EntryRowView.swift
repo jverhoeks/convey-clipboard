@@ -7,9 +7,11 @@ struct EntryRowView: View {
     let entry: ClipboardEntry
     let targets: [Format]
     let onConvert: (ClipboardEntry, Format) -> Void
+    let renderMermaid: (ClipboardEntry) async -> NSImage?
 
     // Decoded once per entry (keyed by `.task(id:)`) rather than re-decoded on every body re-render.
     @State private var thumbnail: NSImage?
+    @State private var mermaidImage: NSImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -23,6 +25,12 @@ struct EntryRowView: View {
             }
             if let thumbnail {
                 Image(nsImage: thumbnail)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else if let mermaidImage {
+                Image(nsImage: mermaidImage)
                     .resizable()
                     .scaledToFit()
                     .frame(maxHeight: 120)
@@ -49,6 +57,10 @@ struct EntryRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .task(id: entry.id) {
             thumbnail = PreviewImageLoader.thumbnail(for: entry)
+        }
+        .task(id: entry.id) {
+            guard entry.kind == .mermaid, mermaidImage == nil else { return }
+            mermaidImage = await renderMermaid(entry)
         }
     }
 }

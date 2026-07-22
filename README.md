@@ -34,9 +34,10 @@ password-manager entries (concealed/transient) are never captured.
 
 ### Known limitations / follow-ups
 
-- Mermaid rows currently show the diagram source text, not a rendered
-  preview. The render path (`Mermaid → PNG`) exists and is used by the
-  convert actions, but it isn't wired into the row thumbnail yet.
+- Mermaid rows render the diagram as a PNG preview (via `Mermaid → PNG`),
+  loaded asynchronously per row; the diagram source text is shown briefly
+  until the render completes (first render may take a moment while the
+  WebKit-backed engine warms up).
 
 ## Build & test
 
