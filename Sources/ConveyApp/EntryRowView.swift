@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ConveyCore
 import ConveyKit
@@ -5,6 +6,7 @@ import ConveyKit
 struct EntryRowView: View {
     let entry: ClipboardEntry
     let targets: [Format]
+    let thumbnail: NSImage?
     let onConvert: (ClipboardEntry, Format) -> Void
 
     var body: some View {
@@ -17,10 +19,18 @@ struct EntryRowView: View {
                     .clipShape(Capsule())
                 Spacer()
             }
-            Text(entry.text.map { PreviewText.snippet($0) } ?? "(image)")
-                .font(.system(.body, design: .rounded))
-                .lineLimit(3)
-                .foregroundStyle(.primary)
+            if let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                Text(entry.text.map { PreviewText.snippet($0) } ?? "(no preview)")
+                    .font(.system(.body, design: .rounded))
+                    .lineLimit(3)
+                    .foregroundStyle(.primary)
+            }
             if !targets.isEmpty {
                 HStack {
                     ForEach(targets, id: \.self) { target in

@@ -25,7 +25,12 @@ struct PickerView: View {
                             .multilineTextAlignment(.center).padding(.top, 40)
                     }
                     ForEach(history.entries) { entry in
-                        EntryRowView(entry: entry, targets: targetsFor(entry), onConvert: onConvert)
+                        EntryRowView(
+                            entry: entry,
+                            targets: targetsFor(entry),
+                            thumbnail: PreviewImageLoader.thumbnail(for: entry),
+                            onConvert: onConvert
+                        )
                     }
                 }
                 .padding(10)
