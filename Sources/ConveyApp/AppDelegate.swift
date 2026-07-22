@@ -3,6 +3,7 @@ import SwiftUI
 import Carbon.HIToolbox
 import ConveyCore
 import ConveyKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -69,6 +70,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSSound.beep()
             }
         }
+    }
+
+    private func data(from payload: Payload) -> Data? {
+        switch payload {
+        case .text(let s): return Data(s.utf8)
+        case .bytes(let b): return b
+        }
+    }
+
+    private func exportData(for entry: ClipboardEntry, to target: Format,
+                            payload: Payload) async throws -> Data? {
+        // Image → PNG has no graph edge; transcode the stored bytes.
+        if target == .png, entry.primaryFormat == .image {
+            guard let bytes = payload.bytes else { return nil }
+            return ImageTranscoder.pngData(from: bytes)
+        }
+        if target == entry.primaryFormat {
+            return data(from: payload)
+        }
+        let result = try await convey.convert(payload, from: entry.primaryFormat, to: target)
+        return data(from: result)
+    }
+
+    private func runSavePanel(_ exportType: ExportFormat, for entry: ClipboardEntry) -> URL? {
+        let panel = NSSavePanel()
+        if let contentType = UTType(exportType.utTypeIdentifier) {
+            panel.allowedContentTypes = [contentType]
+        }
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd-HHmm"
+        panel.nameFieldStringValue =
+            "Convey-\(exportType.label)-\(df.string(from: entry.createdAt)).\(exportType.fileExtension)"
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func save(_ entry: ClipboardEntry, to target: Format) {
+        guard let payload = entry.payload,
+              let exportType = ExportFormat.fileType(for: target) else {
+            NSSound.beep(); return
+        }
+        Task { @MainActor in
+            do {
+                guard let bytes = try await exportData(for: entry, to: target, payload: payload) else {
+                    NSSound.beep(); return
+                }
+                guard let url = runSavePanel(exportType, for: entry) else { return } // user cancelled
+                try bytes.write(to: url)
+                popover.performClose(nil)
+            } catch {
+                NSSound.beep()
+            }
+        }
+    }
+
+    private func delete(_ entry: ClipboardEntry) {
+        history.remove(id: entry.id)
+        let snapshot = history.entries
+        let persistence = self.persistence
+        saveQueue.async { try? persistence.save(snapshot) }
     }
 
     @objc private func togglePopover() {
