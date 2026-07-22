@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makePickerController() -> NSViewController {
         let view = PickerView(
             history: history,
-            targetsFor: { [convey] entry in convey.graph.validTargets(from: entry.sources) },
+            targetsFor: { [convey] entry in convey.graph.validTargets(from: [entry.primaryFormat]) },
             onConvert: { [weak self] entry, target in self?.convert(entry, to: target) },
             onClear: { [weak self] in self?.history.clear() }
         )
@@ -56,12 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func convert(_ entry: ClipboardEntry, to target: Format) {
-        guard let payload = entry.payload, let from = entry.sources.first else { return }
+        guard let payload = entry.payload else { return }
         Task { @MainActor in
             do {
-                // Choose the richest source that can reach the target.
-                let source = entry.sources.first(where: { convey.graph.path(from: $0, to: target) != nil }) ?? from
-                let result = try await convey.convert(payload, from: source, to: target)
+                let result = try await convey.convert(payload, from: entry.primaryFormat, to: target)
                 PasteboardWriter().write(result, as: target, to: .general)
                 popover.performClose(nil)
             } catch {

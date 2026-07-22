@@ -3,9 +3,12 @@ import ConveyCore
 @testable import ConveyKit
 
 final class ClipboardEntryTests: XCTestCase {
-    private func entry(text: String?, image: Data? = nil, sources: [Format]) -> ClipboardEntry {
+    private func entry(text: String?, image: Data? = nil, sources: [Format],
+                        primaryFormat: Format? = nil, previewText: String? = nil) -> ClipboardEntry {
         ClipboardEntry(id: UUID(), sources: sources, kind: ClipboardKind(sources: sources),
-                       text: text, imageData: image, createdAt: Date(timeIntervalSince1970: 0))
+                       primaryFormat: primaryFormat ?? sources.first ?? .plainText,
+                       text: text, imageData: image, previewText: previewText ?? text,
+                       createdAt: Date(timeIntervalSince1970: 0))
     }
 
     func testTextPayload() {

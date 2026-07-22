@@ -5,8 +5,8 @@ import ConveyCore
 @MainActor
 final class HistoryStoreTests: XCTestCase {
     private func entry(_ text: String) -> ClipboardEntry {
-        ClipboardEntry(id: UUID(), sources: [.plainText], kind: .plainText,
-                       text: text, imageData: nil, createdAt: Date(timeIntervalSince1970: 0))
+        ClipboardEntry(id: UUID(), sources: [.plainText], kind: .plainText, primaryFormat: .plainText,
+                       text: text, imageData: nil, previewText: text, createdAt: Date(timeIntervalSince1970: 0))
     }
 
     func testAddNewestFirst() {
@@ -32,8 +32,8 @@ final class HistoryStoreTests: XCTestCase {
     func testCrossTypeEntriesAreNotDuplicates() {
         let s = HistoryStore()
         let textEntry = entry("a")
-        let imageEntry = ClipboardEntry(id: UUID(), sources: [.image], kind: .image,
-                                         text: nil, imageData: Data([1, 2]), createdAt: Date(timeIntervalSince1970: 0))
+        let imageEntry = ClipboardEntry(id: UUID(), sources: [.image], kind: .image, primaryFormat: .image,
+                                         text: nil, imageData: Data([1, 2]), previewText: nil, createdAt: Date(timeIntervalSince1970: 0))
         s.add(textEntry)
         s.add(imageEntry)
         XCTAssertEqual(s.entries.count, 2)

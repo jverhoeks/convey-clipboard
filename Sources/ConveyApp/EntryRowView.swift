@@ -26,7 +26,7 @@ struct EntryRowView: View {
                     .frame(maxHeight: 120)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
-                Text(entry.text.map { PreviewText.snippet($0) } ?? "(no preview)")
+                Text(entry.previewText.map { PreviewText.snippet($0) } ?? "(no preview)")
                     .font(.system(.body, design: .rounded))
                     .lineLimit(3)
                     .foregroundStyle(.primary)

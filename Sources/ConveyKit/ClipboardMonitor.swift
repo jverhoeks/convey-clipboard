@@ -14,18 +14,29 @@ public struct ClipboardMonitor {
         guard !sources.isEmpty else { return nil }
 
         let kind = ClipboardKind(sources: sources)
-        var text: String? = snapshot.string(forType: "public.utf8-plain-text")
-        var imageData: Data?
+        let plain = snapshot.string(forType: "public.utf8-plain-text")
 
-        if text == nil, sources.contains(.image) {
-            imageData = reader.payload(for: .image, from: snapshot)?.bytes
-        }
-        // HTML/RTF-only clipboards without plain text: capture the rich text so it stays reconvertible.
-        if text == nil, imageData == nil {
-            if let html = snapshot.string(forType: "public.html") { text = html }
-        }
-        guard text != nil || imageData != nil else { return nil }
+        let primaryFormat: Format
+        var text: String? = nil
+        var imageData: Data? = nil
 
-        return ClipboardEntry(id: id, sources: sources, kind: kind, text: text, imageData: imageData, createdAt: now)
+        if let html = snapshot.string(forType: "public.html") {
+            primaryFormat = .html; text = html
+        } else if let rtf = snapshot.data(forType: "public.rtf") {
+            primaryFormat = .rtf; imageData = rtf
+        } else if sources.contains(.image), let img = reader.payload(for: .image, from: snapshot)?.bytes {
+            primaryFormat = .image; imageData = img
+        } else if let plain {
+            primaryFormat = sources.contains(.mermaid) ? .mermaid : .plainText
+            text = plain
+        } else {
+            return nil
+        }
+
+        // Readable preview: prefer the plain-text fallback; else the text payload; else nil (image → thumbnail).
+        let previewText = plain ?? text
+
+        return ClipboardEntry(id: id, sources: sources, kind: kind, primaryFormat: primaryFormat,
+                              text: text, imageData: imageData, previewText: previewText, createdAt: now)
     }
 }

@@ -20,7 +20,17 @@ final class ClipboardMonitorTests: XCTestCase {
                              strings: ["public.html": "<b>x</b>", "public.utf8-plain-text": "x"])
         let e = monitor.makeEntry(from: s, id: id, now: now)
         XCTAssertEqual(e?.kind, .html)
-        XCTAssertEqual(e?.text, "x")   // prefers plain text for the stored/reconvertible payload
+        XCTAssertEqual(e?.primaryFormat, .html)
+        XCTAssertEqual(e?.text, "<b>x</b>")   // stores the rich payload so it stays reconvertible
+        XCTAssertEqual(e?.previewText, "x")   // preview uses the readable plain-text fallback
+    }
+    func testBuildsRtfEntry() {
+        let rtf = Data([1, 2, 3])
+        let s = FakeSnapshot(availableTypes: ["public.rtf"], datas: ["public.rtf": rtf])
+        let e = monitor.makeEntry(from: s, id: id, now: now)
+        XCTAssertEqual(e?.primaryFormat, .rtf)
+        XCTAssertEqual(e?.imageData, rtf)
+        XCTAssertNil(e?.text)
     }
     func testSkipsConcealed() {
         let s = FakeSnapshot(availableTypes: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"],
@@ -35,6 +45,7 @@ final class ClipboardMonitorTests: XCTestCase {
         let s = FakeSnapshot(availableTypes: ["public.png"], datas: ["public.png": png])
         let e = monitor.makeEntry(from: s, id: id, now: now)
         XCTAssertEqual(e?.kind, .image)
+        XCTAssertEqual(e?.primaryFormat, .image)
         XCTAssertEqual(e?.imageData, png)
     }
 }

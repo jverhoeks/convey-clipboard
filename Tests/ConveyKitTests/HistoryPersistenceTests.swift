@@ -9,7 +9,8 @@ final class HistoryPersistenceTests: XCTestCase {
         return dir
     }
     private func entry(_ t: String) -> ClipboardEntry {
-        ClipboardEntry(id: UUID(), sources: [.plainText], kind: .plainText, text: t, imageData: nil, createdAt: Date(timeIntervalSince1970: 0))
+        ClipboardEntry(id: UUID(), sources: [.plainText], kind: .plainText, primaryFormat: .plainText,
+                       text: t, imageData: nil, previewText: t, createdAt: Date(timeIntervalSince1970: 0))
     }
 
     func testSaveThenLoadRoundTrips() throws {
