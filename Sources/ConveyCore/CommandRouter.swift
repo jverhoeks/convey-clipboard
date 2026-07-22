@@ -1,6 +1,7 @@
 public enum CLICommand: Equatable {
     case list
     case convert(from: Format, to: Format)
+    case version
     case usage
 }
 
@@ -16,6 +17,7 @@ public let edgeTable: [String: (Format, Format)] = [
 
 public func parseCommand(_ args: [String]) -> CLICommand {
     guard let first = args.first else { return .usage }
+    if first == "version" || first == "--version" || first == "-v" { return .version }
     if first == "list" { return .list }
     if let edge = edgeTable[first] { return .convert(from: edge.0, to: edge.1) }
     return .usage

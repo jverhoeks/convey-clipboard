@@ -18,6 +18,13 @@ final class CommandRouterTests: XCTestCase {
         guard case .usage = parseCommand(["frobnicate"]) else { return XCTFail("expected usage") }
     }
 
+    func testParsesVersion() {
+        guard case .version = parseCommand(["version"]) else { return XCTFail("expected version") }
+        guard case .version = parseCommand(["--version"]) else { return XCTFail("expected version") }
+        guard case .version = parseCommand(["-v"]) else { return XCTFail("expected version") }
+        guard case .usage = parseCommand(["frobnicate"]) else { return XCTFail("expected usage") }
+    }
+
     func testEmptyIsUsage() {
         guard case .usage = parseCommand([]) else { return XCTFail("expected usage") }
     }

@@ -21,6 +21,7 @@ The menu-bar app (history, hotkey, picker UI) is Plan 2.
     convey rtf2md
     convey img2b64
     convey mmd2svg | convey mmd2png
+    convey version                  # print the convey version
 
 ## Menu-bar app (Plan 2)
 
@@ -48,3 +49,19 @@ password-manager entries (concealed/transient) are never captured.
     swift test
 
 Requires macOS 13+ and a window server session (WebKit-backed conversions).
+
+## Releases
+
+Pushing a `v*` tag triggers a GitHub Actions workflow that builds a universal
+(arm64 + x86_64) release of `convey` and `convey-app`, stamps in the tag's
+version (`convey version` / `convey --version` / `convey -v` prints it), and
+publishes a `tar.gz` + `sha256` checksum to GitHub Releases:
+
+    git tag v1.2.3 && git push origin v1.2.3
+
+The binaries are unsigned — after downloading, clear the quarantine
+attribute before running them:
+
+    xattr -d com.apple.quarantine convey convey-app
+
+A signed/notarized `.app` bundle is future work.

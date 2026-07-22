@@ -10,6 +10,7 @@ convey <command>
   rtf2md                      convert clipboard RTF to Markdown
   img2b64                     convert clipboard image to a base64 data-URI
   mmd2svg | mmd2png           render clipboard Mermaid text
+  version | --version | -v    print the convey version
 
 Reads the clipboard, converts, writes the result back to the clipboard.
 For text edges, piped stdin is used as input and stdout receives the result.
@@ -24,6 +25,10 @@ func run() async -> Int32 {
     case .usage:
         print(usage)
         return 2
+
+    case .version:
+        print(conveyVersion)
+        return 0
 
     case .list:
         let sources = PasteboardReader().sources(from: SystemPasteboard())
