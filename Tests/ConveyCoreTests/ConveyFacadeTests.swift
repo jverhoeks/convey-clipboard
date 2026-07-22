@@ -21,4 +21,14 @@ final class ConveyFacadeTests: XCTestCase {
         let result = try await convey.convert(.text("<h1>Hi</h1>"), from: .html, to: .markdown)
         XCTAssertEqual(result.text?.trimmingCharacters(in: .whitespacesAndNewlines), "# Hi")
     }
+
+    @MainActor
+    func testFacadeConvertsRtfToMarkdownEndToEnd() async throws {
+        let url = Bundle.module.url(forResource: "sample", withExtension: "rtf", subdirectory: "Fixtures")!
+        let data = try Data(contentsOf: url)
+        let result = try await Convey().convert(.bytes(data), from: .rtf, to: .markdown)
+        let md = try XCTUnwrap(result.text)
+        XCTAssertTrue(md.contains("Hello"))
+        XCTAssertTrue(md.contains("bold"))
+    }
 }
