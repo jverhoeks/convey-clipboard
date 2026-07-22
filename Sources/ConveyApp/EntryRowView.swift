@@ -6,8 +6,10 @@ import ConveyKit
 struct EntryRowView: View {
     let entry: ClipboardEntry
     let targets: [Format]
-    let thumbnail: NSImage?
     let onConvert: (ClipboardEntry, Format) -> Void
+
+    // Decoded once per entry (keyed by `.task(id:)`) rather than re-decoded on every body re-render.
+    @State private var thumbnail: NSImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -45,5 +47,8 @@ struct EntryRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.secondary.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: entry.id) {
+            thumbnail = PreviewImageLoader.thumbnail(for: entry)
+        }
     }
 }

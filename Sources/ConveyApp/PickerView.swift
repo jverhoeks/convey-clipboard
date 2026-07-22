@@ -28,7 +28,6 @@ struct PickerView: View {
                         EntryRowView(
                             entry: entry,
                             targets: targetsFor(entry),
-                            thumbnail: PreviewImageLoader.thumbnail(for: entry),
                             onConvert: onConvert
                         )
                     }
