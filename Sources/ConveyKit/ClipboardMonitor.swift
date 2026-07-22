@@ -27,7 +27,9 @@ public struct ClipboardMonitor {
         } else if sources.contains(.image), let img = reader.payload(for: .image, from: snapshot)?.bytes {
             primaryFormat = .image; imageData = img
         } else if let plain {
-            primaryFormat = sources.contains(.mermaid) ? .mermaid : .plainText
+            primaryFormat = sources.contains(.mermaid) ? .mermaid
+                          : sources.contains(.markdown) ? .markdown
+                          : .plainText
             text = plain
         } else {
             return nil

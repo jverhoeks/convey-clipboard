@@ -46,4 +46,30 @@ final class PasteboardReaderTests: XCTestCase {
         let snap = FakeSnapshot(availableTypes: ["public.png"], datas: ["public.png": png])
         XCTAssertEqual(reader.payload(for: .image, from: snap), .bytes(png))
     }
+
+    func testDetectsMarkdown() {
+        let snap = FakeSnapshot(
+            availableTypes: ["public.utf8-plain-text"],
+            strings: ["public.utf8-plain-text": "# Title\n\n- a\n- b"]
+        )
+        XCTAssertTrue(reader.sources(from: snap).contains(.markdown))
+    }
+
+    func testPlainProseIsNotMarkdown() {
+        let snap = FakeSnapshot(
+            availableTypes: ["public.utf8-plain-text"],
+            strings: ["public.utf8-plain-text": "just a normal sentence."]
+        )
+        XCTAssertFalse(reader.sources(from: snap).contains(.markdown))
+    }
+
+    func testMermaidTextIsNotAlsoMarkdown() {
+        let snap = FakeSnapshot(
+            availableTypes: ["public.utf8-plain-text"],
+            strings: ["public.utf8-plain-text": "flowchart TD\n A-->B"]
+        )
+        let sources = reader.sources(from: snap)
+        XCTAssertTrue(sources.contains(.mermaid))
+        XCTAssertFalse(sources.contains(.markdown))
+    }
 }

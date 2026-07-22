@@ -48,4 +48,10 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(e?.primaryFormat, .image)
         XCTAssertEqual(e?.imageData, png)
     }
+    func testBuildsMarkdownEntry() {
+        let s = FakeSnapshot(availableTypes: ["public.utf8-plain-text"],
+                             strings: ["public.utf8-plain-text": "# Title\n\n- a\n- b"])
+        let e = monitor.makeEntry(from: s, id: id, now: now)
+        XCTAssertEqual(e?.primaryFormat, .markdown)
+    }
 }
