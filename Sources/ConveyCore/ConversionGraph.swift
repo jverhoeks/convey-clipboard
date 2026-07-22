@@ -1,3 +1,10 @@
+/// A directed graph of `Converter` edges, used to discover and run conversion paths.
+///
+/// `@unchecked Sendable` contract: the graph is built once — via `register(_:)` calls
+/// made from `Convey.init` on the main actor — and is treated as read-only afterward.
+/// `register(_:)` must not be called concurrently with `path`, `validTargets`, or
+/// `convert`; there is no internal synchronization protecting `edges` against
+/// concurrent mutation and reads.
 public final class ConversionGraph: @unchecked Sendable {
     private var edges: [Format: [Converter]] = [:]
 
