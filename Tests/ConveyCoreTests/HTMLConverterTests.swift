@@ -28,5 +28,11 @@ final class HTMLConverterTests: XCTestCase {
         let text = try XCTUnwrap(result.text)
         XCTAssertTrue(text.contains("Title"))
         XCTAssertFalse(text.contains("<strong>"))
+        // Block elements (h1/p/li) must be layout-separated, not mashed together:
+        // a detached div's innerText would collapse to textContent with no breaks.
+        XCTAssertTrue(text.contains("\n"))
+        XCTAssertFalse(text.contains("Titleone"))
+        XCTAssertTrue(text.contains("one"))
+        XCTAssertTrue(text.contains("two"))
     }
 }

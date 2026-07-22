@@ -5,9 +5,16 @@ window.htmlToMarkdown = (html) => _turndown.turndown(html);
 window.markdownToHtml = (md) => marked.parse(md);
 
 window.htmlToPlainText = (html) => {
+  // A detached div has no layout, so innerText would return empty and we'd
+  // silently fall back to textContent (which mashes block elements together
+  // with no line breaks). Remote loads are blocked by the WKContentRuleList
+  // (see WebRuntime), so it's safe to attach to the real document body here.
   const el = document.createElement("div");
   el.innerHTML = html;
-  return el.innerText || el.textContent || "";
+  document.body.appendChild(el);
+  const text = el.innerText || el.textContent || "";
+  document.body.removeChild(el);
+  return text;
 };
 
 if (window.mermaid) {
