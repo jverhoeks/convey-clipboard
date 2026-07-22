@@ -22,6 +22,16 @@ The menu-bar app (history, hotkey, picker UI) is Plan 2.
     convey img2b64
     convey mmd2svg | convey mmd2png
 
+## Menu-bar app (Plan 2)
+
+Run: `swift run convey-app`
+
+A menu-bar ⇄ icon opens a visual clipboard list. Each entry shows a type
+badge, a preview (text snippet / image thumbnail / rendered diagram), and the
+valid convert options for that entry — click one to rewrite the clipboard,
+then ⌘V. Press ⌥⌘V to open the picker from anywhere. History persists across
+launches; password-manager entries (concealed/transient) are never captured.
+
 ## Build & test
 
     swift build
