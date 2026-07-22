@@ -1,6 +1,6 @@
 import Foundation
 
-public struct HistoryPersistence {
+public struct HistoryPersistence: Sendable {
     private let directory: URL
     private var fileURL: URL { directory.appendingPathComponent("history.json") }
 

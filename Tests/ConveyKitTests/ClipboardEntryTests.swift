@@ -26,4 +26,43 @@ final class ClipboardEntryTests: XCTestCase {
         let data = try JSONEncoder().encode(e)
         XCTAssertEqual(try JSONDecoder().decode(ClipboardEntry.self, from: data), e)
     }
+
+    func testDecodesOldFormatMissingNewFields() throws {
+        // Pre-fix history.json entries had no `primaryFormat`/`previewText` keys.
+        let id = UUID()
+        let json = """
+        {
+            "id": "\(id.uuidString)",
+            "sources": ["html"],
+            "kind": "html",
+            "text": "<b>hi</b>",
+            "imageData": null,
+            "createdAt": 0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ClipboardEntry.self, from: data)
+        XCTAssertEqual(decoded.id, id)
+        XCTAssertEqual(decoded.sources, [.html])
+        XCTAssertEqual(decoded.primaryFormat, .html) // defaults to first source
+        XCTAssertEqual(decoded.previewText, "<b>hi</b>") // defaults to text
+    }
+
+    func testDecodesOldFormatWithNoSourcesDefaultsPlainText() throws {
+        let id = UUID()
+        let json = """
+        {
+            "id": "\(id.uuidString)",
+            "sources": [],
+            "kind": "plainText",
+            "text": null,
+            "imageData": null,
+            "createdAt": 0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ClipboardEntry.self, from: data)
+        XCTAssertEqual(decoded.primaryFormat, .plainText)
+        XCTAssertNil(decoded.previewText)
+    }
 }
