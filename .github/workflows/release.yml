@@ -47,10 +47,25 @@ jobs:
           dist="convey-${GITHUB_REF_NAME}-macos-universal"
           mkdir -p "$dist"
           cp "${{ steps.bin.outputs.dir }}/convey" "${{ steps.bin.outputs.dir }}/convey-app" "$dist"/
+          # Ship the ConveyCore resource bundle (vendored turndown/marked/mermaid);
+          # without it every WebKit-backed conversion crashes ("unable to find bundle").
+          cp -R "${{ steps.bin.outputs.dir }}/Convey_ConveyCore.bundle" "$dist"/
           cp README.md LICENSE "$dist"/
           tar -czf "$dist.tar.gz" "$dist"
           shasum -a 256 "$dist.tar.gz" > "$dist.tar.gz.sha256"
           echo "archive=$dist.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test the packaged archive
+        run: |
+          # Extract to a clean dir and run a real conversion, proving the
+          # released binary + bundle work standalone (catches missing resources).
+          work="$(mktemp -d)"
+          tar -xzf "${{ steps.pkg.outputs.archive }}" -C "$work"
+          bin="$work/convey-${GITHUB_REF_NAME}-macos-universal/convey"
+          out="$(printf '<h1>Hi</h1><p><b>bold</b></p>' | "$bin" html2md)"
+          echo "packaged html2md -> $out"
+          echo "$out" | grep -q '# Hi'
+          echo "$out" | grep -q '\*\*bold\*\*'
 
       - name: Create GitHub Release
         env:
