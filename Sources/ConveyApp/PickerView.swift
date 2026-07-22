@@ -8,7 +8,7 @@ struct PickerView: View {
     let targetsFor: (ClipboardEntry) -> [Format]
     let onConvert: (ClipboardEntry, Format) -> Void
     let onClear: () -> Void
-    let renderMermaid: (ClipboardEntry) async -> NSImage?
+    let cache: PreviewCache
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,7 +31,7 @@ struct PickerView: View {
                             entry: entry,
                             targets: targetsFor(entry),
                             onConvert: onConvert,
-                            renderMermaid: renderMermaid
+                            cache: cache
                         )
                     }
                 }

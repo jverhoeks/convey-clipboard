@@ -37,7 +37,10 @@ password-manager entries (concealed/transient) are never captured.
 - Mermaid rows render the diagram as a PNG preview (via `Mermaid → PNG`),
   loaded asynchronously per row; the diagram source text is shown briefly
   until the render completes (first render may take a moment while the
-  WebKit-backed engine warms up).
+  WebKit-backed engine warms up). Once rendered, the image is memoized in a
+  persistent `PreviewCache` keyed by entry id, so scrolling a row off/on
+  screen in the picker's `LazyVStack` reuses the cached image instead of
+  re-decoding a thumbnail or re-rendering the diagram.
 
 ## Build & test
 

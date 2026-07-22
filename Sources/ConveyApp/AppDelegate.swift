@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let popover = NSPopover()
     let history = HistoryStore()
     private let convey = Convey()
+    private lazy var previewCache = PreviewCache(convey: convey)
     private var hotKey: HotKey?
     private let monitor = ClipboardMonitor()
     private let persistence = HistoryPersistence(directory: HistoryPersistence.defaultDirectory)
@@ -52,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             targetsFor: { [convey] entry in convey.graph.validTargets(from: [entry.primaryFormat]) },
             onConvert: { [weak self] entry, target in self?.convert(entry, to: target) },
             onClear: { [weak self] in self?.history.clear() },
-            renderMermaid: { [convey] entry in await PreviewImageLoader.rendered(for: entry, using: convey) }
+            cache: previewCache
         )
         return NSHostingController(rootView: view)
     }
