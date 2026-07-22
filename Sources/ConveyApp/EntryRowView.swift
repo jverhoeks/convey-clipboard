@@ -6,24 +6,36 @@ import ConveyKit
 struct EntryRowView: View {
     let entry: ClipboardEntry
     let targets: [Format]
+    let saveFormats: [ExportFormat]
     let onConvert: (ClipboardEntry, Format) -> Void
+    let onSave: (ClipboardEntry, Format) -> Void
+    let onDelete: (ClipboardEntry) -> Void
     let cache: PreviewCache
 
-    // Backed by `PreviewCache`, which persists across row recycling in the
-    // enclosing `LazyVStack` — scrolling a row off/on screen no longer
-    // re-decodes the thumbnail or re-renders the Mermaid diagram.
     @State private var image: NSImage?
+
+    private static let timeFormatter: DateFormatter = {
+        let df = DateFormatter(); df.dateFormat = "HH:mm"; return df
+    }()
+
+    private var sourceCaption: String? {
+        guard entry.sources.count > 1 else { return nil }
+        return entry.sources.map { $0.rawValue.uppercased() }.joined(separator: " · ")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(entry.kind.badge)
-                    .font(.caption2).bold()
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.2))
-                    .clipShape(Capsule())
+            HStack(alignment: .firstTextBaseline) {
+                Text(entry.kind.badge).font(.headline)
                 Spacer()
+                Text(Self.timeFormatter.string(from: entry.createdAt))
+                    .font(.caption).foregroundStyle(.secondary)
+                Button { onDelete(entry) } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(RowActionButtonStyle(tint: .red))
             }
+
             if let image {
                 Image(nsImage: image)
                     .resizable()
@@ -33,23 +45,40 @@ struct EntryRowView: View {
             } else {
                 Text(entry.previewText.map { PreviewText.snippet($0) } ?? "(no preview)")
                     .font(.system(.body, design: .rounded))
-                    .lineLimit(3)
+                    .lineLimit(2)
                     .foregroundStyle(.primary)
             }
+
+            if let sourceCaption {
+                Text(sourceCaption)
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+
             if !targets.isEmpty {
                 HStack {
                     ForEach(targets, id: \.self) { target in
                         Button("→ \(target.rawValue)") { onConvert(entry, target) }
-                            .buttonStyle(.borderless)
-                            .font(.caption)
+                            .buttonStyle(RowActionButtonStyle())
+                    }
+                }
+            }
+
+            if !saveFormats.isEmpty {
+                HStack {
+                    ForEach(saveFormats, id: \.format) { fmt in
+                        Button { onSave(entry, fmt.format) } label: {
+                            Label(fmt.label, systemImage: "square.and.arrow.down")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .buttonStyle(RowActionButtonStyle())
                     }
                 }
             }
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
         .task(id: entry.id) {
             image = await cache.image(for: entry)
         }

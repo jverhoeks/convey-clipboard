@@ -6,7 +6,10 @@ import ConveyKit
 struct PickerView: View {
     @ObservedObject var history: HistoryStore
     let targetsFor: (ClipboardEntry) -> [Format]
+    let saveFormatsFor: (ClipboardEntry) -> [ExportFormat]
     let onConvert: (ClipboardEntry, Format) -> Void
+    let onSave: (ClipboardEntry, Format) -> Void
+    let onDelete: (ClipboardEntry) -> Void
     let onClear: () -> Void
     let cache: PreviewCache
 
@@ -15,7 +18,10 @@ struct PickerView: View {
             HStack {
                 Text("Convey").font(.headline)
                 Spacer()
-                Button("Clear", action: onClear).buttonStyle(.borderless).font(.caption)
+                Button("Clear All", action: onClear)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .font(.caption)
             }
             .padding(10)
             Divider()
@@ -30,7 +36,10 @@ struct PickerView: View {
                         EntryRowView(
                             entry: entry,
                             targets: targetsFor(entry),
+                            saveFormats: saveFormatsFor(entry),
                             onConvert: onConvert,
+                            onSave: onSave,
+                            onDelete: onDelete,
                             cache: cache
                         )
                     }

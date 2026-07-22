@@ -52,7 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let view = PickerView(
             history: history,
             targetsFor: { [convey] entry in convey.graph.validTargets(from: [entry.primaryFormat]) },
+            saveFormatsFor: { [convey] entry in
+                let reachable = convey.graph.validTargets(from: [entry.primaryFormat])
+                return ExportFormat.options(nativeFormat: entry.primaryFormat, reachable: reachable)
+            },
             onConvert: { [weak self] entry, target in self?.convert(entry, to: target) },
+            onSave: { [weak self] entry, target in self?.save(entry, to: target) },
+            onDelete: { [weak self] entry in self?.delete(entry) },
             onClear: { [weak self] in self?.history.clear() },
             cache: previewCache
         )
