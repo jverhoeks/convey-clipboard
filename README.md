@@ -55,7 +55,17 @@ Requires macOS 13+ and a window server session (WebKit-backed conversions).
 Pushing a `v*` tag triggers a GitHub Actions workflow that builds a universal
 (arm64 + x86_64) release of `convey` and `convey-app`, stamps in the tag's
 version (`convey version` / `convey --version` / `convey -v` prints it), and
-publishes a `tar.gz` + `sha256` checksum to GitHub Releases:
+publishes a `tar.gz` + `sha256` checksum to GitHub Releases.
+
+Cut a release by bumping the semver tag (computed from the latest `v*` tag)
+and pushing it:
+
+    make patch      # v0.1.0 -> v0.1.1
+    make minor      # v0.1.0 -> v0.2.0
+    make major      # v0.1.0 -> v1.0.0
+    make next-version   # preview the next versions without tagging
+
+Or tag manually:
 
     git tag v1.2.3 && git push origin v1.2.3
 
