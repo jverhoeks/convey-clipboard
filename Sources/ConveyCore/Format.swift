@@ -1,4 +1,4 @@
-public enum Format: String, CaseIterable, Sendable {
+public enum Format: String, CaseIterable, Sendable, Codable {
     case html
     case rtf
     case plainText

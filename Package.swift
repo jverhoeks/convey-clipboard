@@ -7,6 +7,8 @@ let package = Package(
     products: [
         .library(name: "ConveyCore", targets: ["ConveyCore"]),
         .executable(name: "convey", targets: ["convey"]),
+        .library(name: "ConveyKit", targets: ["ConveyKit"]),
+        .executable(name: "convey-app", targets: ["ConveyApp"]),
     ],
     targets: [
         .target(
@@ -22,5 +24,8 @@ let package = Package(
             dependencies: ["ConveyCore"],
             resources: [.copy("Fixtures")]
         ),
+        .target(name: "ConveyKit", dependencies: ["ConveyCore"]),
+        .executableTarget(name: "ConveyApp", dependencies: ["ConveyCore", "ConveyKit"]),
+        .testTarget(name: "ConveyKitTests", dependencies: ["ConveyKit"]),
     ]
 )
