@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import ConveyCore
 
 final class ImageToBase64ConverterTests: XCTestCase {
@@ -12,6 +13,23 @@ final class ImageToBase64ConverterTests: XCTestCase {
 
     func testDetectsJpeg() {
         XCTAssertEqual(ImageToBase64Converter.mime(for: Data([0xFF, 0xD8, 0xFF])), "image/jpeg")
+    }
+
+    @MainActor
+    func testTranscodesTiffToPng() async throws {
+        let image = NSImage(size: NSSize(width: 1, height: 1))
+        image.lockFocus()
+        NSColor.red.setFill()
+        NSRect(x: 0, y: 0, width: 1, height: 1).fill()
+        image.unlockFocus()
+        guard let tiff = image.tiffRepresentation else {
+            return XCTFail("could not build a TIFF fixture")
+        }
+        XCTAssertTrue(ImageToBase64Converter.isTIFF(tiff))
+
+        let result = try await converter.convert(.bytes(tiff))
+        let text = try XCTUnwrap(result.text)
+        XCTAssertTrue(text.hasPrefix("data:image/png;base64,"))
     }
 
     func testRejectsTextPayload() async {
