@@ -24,4 +24,8 @@ public final class HistoryStore: ObservableObject {
     public func clear() {
         entries.removeAll()
     }
+
+    public func remove(id: UUID) {
+        entries.removeAll { $0.id == id }
+    }
 }
