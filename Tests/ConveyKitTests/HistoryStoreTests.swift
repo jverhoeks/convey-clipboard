@@ -38,4 +38,19 @@ final class HistoryStoreTests: XCTestCase {
         s.add(imageEntry)
         XCTAssertEqual(s.entries.count, 2)
     }
+
+    func testRemoveByIdRemovesMatchingEntry() {
+        let s = HistoryStore()
+        let a = entry("a"); let b = entry("b")
+        s.add(a); s.add(b)                       // entries: [b, a]
+        s.remove(id: a.id)
+        XCTAssertEqual(s.entries.map(\.text), ["b"])
+    }
+
+    func testRemoveUnknownIdIsNoOp() {
+        let s = HistoryStore()
+        s.add(entry("a"))
+        s.remove(id: UUID())
+        XCTAssertEqual(s.entries.map(\.text), ["a"])
+    }
 }
