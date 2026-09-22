@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import ConveyCore
 
 private struct FakeSnapshot: PasteboardSnapshot {
@@ -71,5 +72,15 @@ final class PasteboardReaderTests: XCTestCase {
         let sources = reader.sources(from: snap)
         XCTAssertTrue(sources.contains(.mermaid))
         XCTAssertFalse(sources.contains(.markdown))
+    }
+
+    func testTiffOnlyImageIsReturnedAsPng() throws {
+        let image = NSImage(size: NSSize(width: 2, height: 2), flipped: false) { rect in
+            NSColor.red.setFill(); rect.fill(); return true
+        }
+        let tiff = try XCTUnwrap(image.tiffRepresentation)
+        let snap = FakeSnapshot(availableTypes: ["public.tiff"], datas: ["public.tiff": tiff])
+        guard case let .bytes(out)? = reader.payload(for: .image, from: snap) else { return XCTFail("no payload") }
+        XCTAssertEqual(ImageToBase64Converter.mime(for: out), "image/png")
     }
 }

@@ -73,7 +73,10 @@ public struct PasteboardReader {
             return snapshot.string(forType: "public.utf8-plain-text").map(Payload.text)
         case .image:
             if let png = snapshot.data(forType: "public.png") { return .bytes(png) }
-            return snapshot.data(forType: "public.tiff").map(Payload.bytes)
+            // Many apps put only public.tiff on the clipboard; normalize so every stored
+            // image is PNG (history, Save as, Open in default app all assume it).
+            return snapshot.data(forType: "public.tiff")
+                .flatMap(ImageToBase64Converter.pngFromTIFF).map(Payload.bytes)
         case .png, .svg, .base64DataURI:
             return nil
         }

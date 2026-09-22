@@ -19,6 +19,11 @@ public struct ImageToBase64Converter: Converter {
         d.starts(with: [0x49, 0x49, 0x2A, 0x00]) || d.starts(with: [0x4D, 0x4D, 0x00, 0x2A])
     }
 
+    /// TIFF bytes -> PNG bytes via AppKit; nil if the data isn't decodable.
+    public static func pngFromTIFF(_ data: Data) -> Data? {
+        NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:])
+    }
+
     public func convert(_ input: Payload) async throws -> Payload {
         guard case let .bytes(data) = input else {
             throw ConversionError.wrongPayload(expected: "bytes")
@@ -29,10 +34,7 @@ public struct ImageToBase64Converter: Converter {
         var out = data
         if Self.isTIFF(data) {
             out = try await MainActor.run { () throws -> Data in
-                guard let rep = NSBitmapImageRep(data: data),
-                      let png = rep.representation(using: .png, properties: [:]) else {
-                    throw ConversionError.engineFailed("tiff->png")
-                }
+                guard let png = Self.pngFromTIFF(data) else { throw ConversionError.engineFailed("tiff->png") }
                 return png
             }
         }
