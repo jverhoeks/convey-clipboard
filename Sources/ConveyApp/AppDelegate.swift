@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let history = HistoryStore()
     private let convey = Convey()
     private lazy var previewCache = PreviewCache(convey: convey)
-    private var hotKey: HotKey?
+    private var hotKeys: [HotKey] = []
     private let monitor = ClipboardMonitor()
     private let persistence = HistoryPersistence(directory: HistoryPersistence.defaultDirectory)
     private var pollTimer: Timer?
@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let saveQueue = DispatchQueue(label: "convey.history.save")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Prefs.store.register(defaults: Prefs.defaults)
         history.replaceAll(persistence.load())
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
             // Timer fires on the main run loop, so it's safe to hop to the MainActor
@@ -40,11 +41,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentSize = NSSize(width: 380, height: 480)
         popover.contentViewController = makePickerController()
 
-        // ⌥⌘V — keyCode 9 is 'v'; modifiers optionKey | cmdKey.
-        hotKey = HotKey(keyCode: UInt32(kVK_ANSI_V),
-                        modifiers: UInt32(optionKey | cmdKey)) { [weak self] in
-            self?.togglePopover()
+        Prefs.store.removeObject(forKey: Prefs.suspendedKey)  // stale if we died mid-recording
+        registerHotKeys()
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: Prefs.store, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.registerHotKeys() }
         }
+    }
+
+    private func registerHotKeys() {
+        let bindings: [(String, () -> Void)] = [
+            ("hotkey.picker", { [weak self] in self?.togglePopover() }),
+            ("hotkey.screen", { Screenshot.capture(.screen) }),
+            ("hotkey.area",   { Screenshot.capture(.area) }),
+            ("hotkey.window", { Screenshot.capture(.window) }),
+        ]
+        hotKeys = []  // unregister old ones first
+        guard !Prefs.store.bool(forKey: Prefs.suspendedKey) else { return }
+        hotKeys = bindings.compactMap { key, action in
+            Prefs.hotKey(key).flatMap { HotKey(keyCode: $0.keyCode, modifiers: $0.modifiers, handler: action) }
+        }
+    }
+
+    private var prefsWindow: NSWindow?
+    private func showPreferences() {
+        popover.performClose(nil)
+        if prefsWindow == nil {
+            let w = NSWindow(contentViewController: NSHostingController(rootView: PreferencesView()))
+            w.title = "Convey Preferences"; w.styleMask = [.titled, .closable]; w.isReleasedWhenClosed = false
+            prefsWindow = w
+        }
+        prefsWindow?.center(); prefsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func makePickerController() -> NSViewController {
@@ -52,7 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             history: history,
             targetsFor: { [convey] entry in convey.graph.validTargets(from: [entry.primaryFormat]) },
             onConvert: { [weak self] entry, target in self?.convert(entry, to: target) },
+            onSave: { [weak self] entry, target in self?.save(entry, as: target) },
+            onOpen: { [weak self] entry in self?.open(entry) },
             onClear: { [weak self] in self?.history.clear() },
+            onPreferences: { [weak self] in self?.showPreferences() },
             cache: previewCache
         )
         return NSHostingController(rootView: view)
@@ -68,6 +98,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 NSSound.beep()
             }
+        }
+    }
+
+    /// Payload of `entry` in `target` (converting if needed), written to `url` for Save/Open.
+    private func export(_ entry: ClipboardEntry, as target: Format, to url: URL) async throws {
+        guard let payload = entry.payload else { return }
+        let out = target == entry.primaryFormat ? payload
+                : try await convey.convert(payload, from: entry.primaryFormat, to: target)
+        switch out {
+        case let .text(t): try t.write(to: url, atomically: true, encoding: .utf8)
+        case let .bytes(d): try d.write(to: url, options: .atomic)
+        }
+    }
+
+    private func save(_ entry: ClipboardEntry, as target: Format) {
+        popover.performClose(nil)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "clipboard.\(target.fileExtension)"
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { @MainActor in
+            do { try await export(entry, as: target, to: url) } catch { NSSound.beep() }
+        }
+    }
+
+    private func open(_ entry: ClipboardEntry) {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("convey-\(entry.id.uuidString.prefix(8)).\(entry.primaryFormat.fileExtension)")
+        Task { @MainActor in
+            do { try await export(entry, as: entry.primaryFormat, to: url); NSWorkspace.shared.open(url) }
+            catch { NSSound.beep() }
         }
     }
 

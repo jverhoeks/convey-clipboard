@@ -33,6 +33,28 @@ options for that entry — click one to rewrite the clipboard, then ⌘V. Press
 ⌥⌘V to open the picker from anywhere. History persists across launches;
 password-manager entries (concealed/transient) are never captured.
 
+Screenshots (Greenshot-style): ⌃⇧0 full screen, ⌃⇧1 area, ⌃⇧2 window. The PNG
+is saved to `~/Pictures/Convey/Convey yyyy-MM-dd HH_mm_ss.png` and put on the
+clipboard (so it lands in history too). The gear in the picker opens
+Preferences: rebind hotkeys, filename prefix, folder, copy/save toggles,
+start on login (LaunchAgent), and a button to grant Screen Recording.
+
+Each history row has a ⋯ menu: convert the clipboard, save as any target
+format, or open in the default app. Entries that look like credentials
+(`sk-…`, `ghp_…`, AWS keys, private keys, JWTs, `TOKEN=…`) are masked, need
+Touch ID / password to reveal, and are never written to disk.
+
+### Install
+
+```bash
+brew install --cask --no-quarantine jverhoeks/tap/convey   # Convey.app + `convey` CLI
+```
+
+Or build it yourself: `make bundle` produces an ad-hoc signed `Convey.app`
+(menu-bar app, CLI, and the ConveyCore resource bundle). Releases are cut with
+`make patch|minor|major`; afterwards `make cask` regenerates the cask in the
+sibling `homebrew-tap` checkout.
+
 ### Known limitations / follow-ups
 
 - Mermaid rows render the diagram as a PNG preview (via `Mermaid → PNG`),

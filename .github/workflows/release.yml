@@ -51,49 +51,39 @@ jobs:
           file "$BIN/convey" "$BIN/convey-app"
           lipo -info "$BIN/convey"
 
-      - name: Package
+      - name: Package Convey.app
         id: pkg
         env:
+          VALUE: ${{ steps.version.outputs.value }}
           TAG: ${{ steps.version.outputs.tag }}
           BIN: ${{ steps.bin.outputs.dir }}
         run: |
-          dist="convey-$TAG-macos-universal"
-          mkdir -p "$dist"
-          cp "$BIN/convey" "$BIN/convey-app" "$dist"/
-          # Ship the ConveyCore resource bundle (vendored turndown/marked/mermaid).
-          # Without it the binary crashes: "unable to find bundle Convey_ConveyCore".
-          cp -R "$BIN/Convey_ConveyCore.bundle" "$dist"/
-          cp README.md LICENSE "$dist"/
-          tar -czf "$dist.tar.gz" "$dist"
-          shasum -a 256 "$dist.tar.gz" > "$dist.tar.gz.sha256"
-          echo "dist=$dist" >> "$GITHUB_OUTPUT"
-          echo "archive=$dist.tar.gz" >> "$GITHUB_OUTPUT"
+          # Bundles convey-app, the convey CLI and the ConveyCore resource bundle
+          # (vendored turndown/marked/mermaid; without it the binary crashes with
+          # "unable to find bundle Convey_ConveyCore").
+          make bundle VERSION="$VALUE" BIN_DIR="$BIN"
+          archive="Convey-$TAG-macos-universal.zip"
+          ditto -c -k --keepParent Convey.app "$archive"
+          shasum -a 256 "$archive" > "$archive.sha256"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
-      - name: Verify archive ships the resource bundle
+      - name: Verify bundle
         env:
-          DIST: ${{ steps.pkg.outputs.dist }}
+          VALUE: ${{ steps.version.outputs.value }}
           ARCHIVE: ${{ steps.pkg.outputs.archive }}
         run: |
-          # The WebKit-backed conversions cannot run on a headless CI runner, so
-          # instead of executing a conversion we verify STRUCTURALLY that the
-          # resource bundle (the vendored JS that the binary loads at runtime)
-          # is present in the archive — this is exactly the packaging regression
-          # that previously crashed the released binary.
-          listing="$(tar -tzf "$ARCHIVE")"
+          # WebKit conversions can't run headless, so verify structurally.
+          listing="$(unzip -Z1 "$ARCHIVE")"
           echo "$listing"
-          required=(
-            "$DIST/convey"
-            "$DIST/convey-app"
-            "$DIST/Convey_ConveyCore.bundle/Contents/Resources/web/runtime.html"
-            "$DIST/Convey_ConveyCore.bundle/Contents/Resources/web/bridge.js"
-            "$DIST/Convey_ConveyCore.bundle/Contents/Resources/web/turndown.js"
-            "$DIST/Convey_ConveyCore.bundle/Contents/Resources/web/marked.min.js"
-            "$DIST/Convey_ConveyCore.bundle/Contents/Resources/web/mermaid.min.js"
-          )
-          for f in "${required[@]}"; do
+          for f in Convey.app/Contents/Info.plist Convey.app/Contents/MacOS/convey-app Convey.app/Contents/MacOS/convey \
+                   Convey.app/Contents/Resources/Convey_ConveyCore.bundle/Contents/Resources/web/runtime.html \
+                   Convey.app/Contents/Resources/Convey_ConveyCore.bundle/Contents/Resources/web/mermaid.min.js; do
             printf '%s\n' "$listing" | grep -Fqx "$f" || { echo "MISSING from archive: $f" >&2; exit 1; }
           done
-          echo "archive contents verified"
+          test "$(Convey.app/Contents/MacOS/convey version)" = "$VALUE"
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Convey.app/Contents/Info.plist)" = "$VALUE"
+          codesign --verify --deep --strict Convey.app
+          echo "bundle verified"
 
       - name: Create GitHub Release
         env:

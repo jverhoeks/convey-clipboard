@@ -10,15 +10,16 @@ public struct ClipboardEntry: Identifiable, Equatable, Codable, Sendable {
     public let imageData: Data?        // payload when bytes (image OR rtf)
     public let previewText: String?    // human-readable snippet for the row (may differ from `text`)
     public let createdAt: Date
+    public let isSecret: Bool        // looks like a credential: masked in UI, never persisted
 
     public init(id: UUID, sources: [Format], kind: ClipboardKind, primaryFormat: Format,
-                text: String?, imageData: Data?, previewText: String?, createdAt: Date) {
+                text: String?, imageData: Data?, previewText: String?, createdAt: Date, isSecret: Bool = false) {
         self.id = id; self.sources = sources; self.kind = kind; self.primaryFormat = primaryFormat
-        self.text = text; self.imageData = imageData; self.previewText = previewText; self.createdAt = createdAt
+        self.text = text; self.imageData = imageData; self.previewText = previewText; self.createdAt = createdAt; self.isSecret = isSecret
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, sources, kind, primaryFormat, text, imageData, previewText, createdAt
+        case id, sources, kind, primaryFormat, text, imageData, previewText, createdAt, isSecret
     }
 
     public init(from decoder: Decoder) throws {
@@ -33,6 +34,7 @@ public struct ClipboardEntry: Identifiable, Equatable, Codable, Sendable {
         primaryFormat = try c.decodeIfPresent(Format.self, forKey: .primaryFormat)
             ?? sources.first ?? .plainText
         previewText = try c.decodeIfPresent(String.self, forKey: .previewText) ?? text
+        isSecret = try c.decodeIfPresent(Bool.self, forKey: .isSecret) ?? false
     }
 
     public var payload: Payload? {

@@ -16,7 +16,7 @@ public struct HistoryPersistence: Sendable {
 
     public func save(_ entries: [ClipboardEntry]) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(entries)
+        let data = try JSONEncoder().encode(entries.filter { !$0.isSecret })
         try data.write(to: fileURL, options: .atomic)
     }
 

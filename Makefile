@@ -8,7 +8,7 @@ PREFIX ?= /usr/local
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build release test run cli app clean install uninstall next-version patch minor major _bump
+.PHONY: help build release test run cli app bundle cask clean install uninstall next-version patch minor major _bump
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -33,6 +33,29 @@ app: ## Build the menu-bar app
 run: app ## Build and launch the menu-bar app
 	$(APP_BIN)
 
+# --- Convey.app bundle: menu-bar app + CLI + resource bundle, ad-hoc signed ---
+BIN_DIR ?= .build/release
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+APP := Convey.app
+
+bundle: ## Assemble $(APP) from $(BIN_DIR) (builds release if missing; VERSION=x.y.z)
+	@test -x "$(BIN_DIR)/convey-app" || $(SWIFT) build -c release
+	rm -rf "$(APP)"
+	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
+	cp "$(BIN_DIR)/convey-app" "$(BIN_DIR)/convey" "$(APP)/Contents/MacOS/"
+	cp -R "$(BIN_DIR)/Convey_ConveyCore.bundle" "$(APP)/Contents/Resources/"
+	sed 's/@VERSION@/$(or $(VERSION),0.0.0)/g' Packaging/Info.plist > "$(APP)/Contents/Info.plist"
+	codesign --force --deep -s - "$(APP)"
+	@echo "built $(APP) ($(or $(VERSION),0.0.0))"
+
+TAP ?= ../../homebrew-tap
+cask: ## Write Casks/convey.rb into $(TAP) for the latest GitHub release
+	@tag=$$(gh release view --json tagName -q .tagName); v=$${tag#v}; \
+	sha=$$(gh release download "$$tag" -p 'Convey-*.zip.sha256' -O - | cut -d' ' -f1); \
+	mkdir -p "$(TAP)/Casks"; \
+	sed -e "s/@VERSION@/$$v/" -e "s/@SHA256@/$$sha/" Packaging/convey.rb.tmpl > "$(TAP)/Casks/convey.rb"; \
+	echo "wrote $(TAP)/Casks/convey.rb for $$tag — commit & push the tap"
+
 install: release ## Install the release CLI to $(PREFIX)/bin
 	install -d "$(PREFIX)/bin"
 	install -m 0755 .build/release/convey "$(PREFIX)/bin/convey"
@@ -43,7 +66,7 @@ uninstall: ## Remove the installed CLI
 
 clean: ## Remove build artifacts
 	$(SWIFT) package clean
-	rm -rf .build
+	rm -rf .build Convey.app
 
 # --- Releases: bump the semver tag and push it (triggers .github/workflows/release.yml) ---
 

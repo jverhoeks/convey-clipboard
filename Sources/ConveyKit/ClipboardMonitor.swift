@@ -39,6 +39,7 @@ public struct ClipboardMonitor {
         let previewText = plain ?? text
 
         return ClipboardEntry(id: id, sources: sources, kind: kind, primaryFormat: primaryFormat,
-                              text: text, imageData: imageData, previewText: previewText, createdAt: now)
+                              text: text, imageData: imageData, previewText: previewText, createdAt: now,
+                              isSecret: previewText.map(SecretDetector.looksLikeSecret) ?? false)
     }
 }
