@@ -6,6 +6,7 @@
 	<key>CFBundleIdentifier</key>            <string>com.jverhoeks.convey</string>
 	<key>CFBundleName</key>                  <string>Convey</string>
 	<key>CFBundleDisplayName</key>           <string>Convey</string>
+	<key>CFBundleIconFile</key>              <string>Convey.icns</string>
 	<key>CFBundlePackageType</key>           <string>APPL</string>
 	<key>CFBundleShortVersionString</key>    <string>@VERSION@</string>
 	<key>CFBundleVersion</key>               <string>@VERSION@</string>
@@ -13,6 +14,6 @@
 	<key>LSUIElement</key>                   <true/>
 	<key>NSHighResolutionCapable</key>       <true/>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Convey takes screenshots with ⌃⇧0/1/2 and copies them to the clipboard.</string>
+	<string>Convey captures the screen or an area you select so you can edit, copy, or save it.</string>
 </dict>
 </plist>

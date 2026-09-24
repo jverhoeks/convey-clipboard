@@ -18,7 +18,8 @@ final class ClipboardEntryTests: XCTestCase {
         let d = Data([1, 2]); XCTAssertEqual(entry(text: nil, image: d, sources: [.image]).payload, .bytes(d))
     }
     func testSameContentDedupByText() {
-        XCTAssertTrue(entry(text: "x", sources: [.html]).sameContent(as: entry(text: "x", sources: [.plainText])))
+        XCTAssertFalse(entry(text: "x", sources: [.html]).sameContent(as: entry(text: "x", sources: [.plainText])))
+        XCTAssertTrue(entry(text: "x", sources: [.html]).sameContent(as: entry(text: "x", sources: [.html])))
         XCTAssertFalse(entry(text: "x", sources: [.html]).sameContent(as: entry(text: "y", sources: [.html])))
     }
     func testRoundTripsCodable() throws {

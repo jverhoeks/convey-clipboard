@@ -8,7 +8,7 @@ PREFIX ?= /usr/local
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build release test run cli app bundle cask clean install uninstall next-version patch minor major _bump
+.PHONY: help build release test run cli app bundle icon verify-bundle archive cask clean install uninstall next-version patch minor major screenshots _bump
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -30,23 +30,38 @@ cli: ## Build the CLI, then print its usage
 app: ## Build the menu-bar app
 	$(SWIFT) build --product convey-app
 
-run: app ## Build and launch the menu-bar app
-	$(APP_BIN)
+run: ## Build and launch the app bundle (correct icon and permission identity)
+	$(MAKE) bundle CONFIGURATION=debug ARCHS=$$(uname -m)
+	@pkill -f "$(CURDIR)/Convey.app/Contents/MacOS/convey-app" 2>/dev/null || true
+	open Convey.app
+
+screenshots: ## Render the README images into docs/images (sample data only; does not touch history)
+	$(SWIFT) build --product convey-app
+	mkdir -p docs/images
+	.build/debug/convey-app --screenshots docs/images
 
 # --- Convey.app bundle: menu-bar app + CLI + resource bundle, ad-hoc signed ---
-BIN_DIR ?= .build/release
 VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
 APP := Convey.app
 
-bundle: ## Assemble $(APP) from $(BIN_DIR) (builds release if missing; VERSION=x.y.z)
-	@test -x "$(BIN_DIR)/convey-app" || $(SWIFT) build -c release
-	rm -rf "$(APP)"
-	mkdir -p "$(APP)/Contents/MacOS" "$(APP)/Contents/Resources"
-	cp "$(BIN_DIR)/convey-app" "$(BIN_DIR)/convey" "$(APP)/Contents/MacOS/"
-	cp -R "$(BIN_DIR)/Convey_ConveyCore.bundle" "$(APP)/Contents/Resources/"
-	sed 's/@VERSION@/$(or $(VERSION),0.0.0)/g' Packaging/Info.plist > "$(APP)/Contents/Info.plist"
-	codesign --force --deep -s - "$(APP)"
-	@echo "built $(APP) ($(or $(VERSION),0.0.0))"
+bundle: ## Build a fresh universal app; optional BIN_DIR for explicit prebuilt products
+	SWIFT="$(SWIFT)" VERSION="$(or $(VERSION),0.0.0)" BIN_DIR="$(BIN_DIR)" CONFIGURATION="$(or $(CONFIGURATION),release)" ARCHS="$(or $(ARCHS),arm64 x86_64)" CODE_SIGN_IDENTITY="$(or $(CODE_SIGN_IDENTITY),-)" bash Packaging/bundle.sh
+
+icon: ## Regenerate the complete macOS icon from vector source
+	$(SWIFT) Packaging/GenerateIcon.swift .build/Convey.iconset
+	iconutil -c icns .build/Convey.iconset -o Packaging/Convey.icns
+	cp .build/Convey.iconset/icon_512x512@2x.png Packaging/Convey.png
+
+verify-bundle: ## Verify icon, resources, version, signatures, and universal architectures
+	bash Packaging/verify-bundle.sh "$(APP)"
+
+archive: verify-bundle ## ZIP the verified universal app and write a SHA-256 checksum
+	@mkdir -p dist
+	@version=$$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$(APP)/Contents/Info.plist"); \
+	archive="dist/Convey-$$version-macos-universal.zip"; \
+	ditto -c -k --keepParent "$(APP)" "$$archive"; \
+	shasum -a 256 "$$archive" > "$$archive.sha256"; \
+	echo "created $$archive"
 
 TAP ?= ../../homebrew-tap
 cask: ## Write Casks/convey.rb into $(TAP) for the latest GitHub release

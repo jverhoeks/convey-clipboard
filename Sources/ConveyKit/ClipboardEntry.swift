@@ -44,6 +44,7 @@ public struct ClipboardEntry: Identifiable, Equatable, Codable, Sendable {
     }
 
     public func sameContent(as other: ClipboardEntry) -> Bool {
+        guard primaryFormat == other.primaryFormat else { return false }
         if let a = text, let b = other.text { return a == b }
         if let a = imageData, let b = other.imageData { return a == b }
         return false

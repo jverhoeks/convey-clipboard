@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Prefs.store.register(defaults: Prefs.defaults)
+        installEditingMenu()
         history.replaceAll(persistence.load())
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
             // Timer fires on the main run loop, so it's safe to hop to the MainActor
@@ -29,13 +30,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // A text glyph is more robust than relying on an SF Symbol: if symbol lookup
+        // fails, AppKit otherwise leaves a zero-width, invisible menu-bar item.
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.isVisible = true
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "Convey")
-            image?.isTemplate = true
-            button.image = image
+            button.title = "⇄"
+            button.toolTip = "Convey Clipboard"
+            button.setAccessibilityLabel("Convey Clipboard")
             button.action = #selector(togglePopover)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])  // right-click: Preferences / Quit menu
         }
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 380, height: 480)
@@ -62,7 +67,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func installEditingMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit Convey", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        menu.addItem(appItem)
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        for (title, action, key) in [("Undo", "undo:", "z"), ("Redo", "redo:", "Z"),
+                                    ("Cut", "cut:", "x"), ("Copy", "copy:", "c"),
+                                    ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
+            editMenu.addItem(withTitle: title, action: NSSelectorFromString(action), keyEquivalent: key)
+        }
+        editItem.submenu = editMenu
+        menu.addItem(editItem)
+        NSApp.mainMenu = menu
+    }
+
     private var prefsWindow: NSWindow?
+    private var editors: [UUID: EditorWindowController] = [:]
+
+    private func edit(_ entry: ClipboardEntry) {
+        do {
+            let controller: EditorWindowController
+            if let existing = editors[entry.id] {
+                controller = existing
+            } else {
+                controller = try EditorWindowController(entry: entry, convey: convey)
+                controller.onClose = { [weak self] in self?.editors.removeValue(forKey: entry.id) }
+                editors[entry.id] = controller
+            }
+            popover.performClose(nil)
+            controller.showWindow(nil)
+            controller.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } catch { showConversionError(error) }
+    }
+    @objc private func openPreferences() { showPreferences() }
     private func showPreferences() {
         popover.performClose(nil)
         if prefsWindow == nil {
@@ -81,7 +124,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onConvert: { [weak self] entry, target in self?.convert(entry, to: target) },
             onSave: { [weak self] entry, target in self?.save(entry, as: target) },
             onOpen: { [weak self] entry in self?.open(entry) },
-            onClear: { [weak self] in self?.history.clear() },
+            onEdit: { [weak self] entry in self?.edit(entry) },
+            onRemove: { [weak self] entry in
+                self?.history.remove(id: entry.id)
+                self?.persistHistory()
+            },
+            onClear: { [weak self] in
+                self?.history.clear()
+                self?.persistHistory()
+            },
             onPreferences: { [weak self] in self?.showPreferences() },
             cache: previewCache
         )
@@ -96,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 PasteboardWriter().write(result, as: target, to: .general)
                 popover.performClose(nil)
             } catch {
-                NSSound.beep()
+                showConversionError(error)
             }
         }
     }
@@ -119,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { @MainActor in
-            do { try await export(entry, as: target, to: url) } catch { NSSound.beep() }
+            do { try await export(entry, as: target, to: url) } catch { showConversionError(error) }
         }
     }
 
@@ -132,8 +183,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func showConversionError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Could not convert clipboard entry"
+        alert.informativeText = error.localizedDescription
+        alert.runModal()
+    }
+
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            let menu = NSMenu()
+            menu.addItem(withTitle: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",").target = self
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Quit Convey", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+            statusItem.menu = menu; button.performClick(nil); statusItem.menu = nil
+            return
+        }
         if popover.isShown {
             popover.performClose(nil)
         } else {
@@ -148,9 +214,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastChangeCount = pb.changeCount
         guard let entry = monitor.makeEntry(from: SystemPasteboard(pb), id: UUID(), now: Date()) else { return }
         history.add(entry)
+        persistHistory()
+    }
+
+    private func persistHistory() {
         let snapshot = history.entries
         let persistence = self.persistence
         saveQueue.async { try? persistence.save(snapshot) }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard editors.values.contains(where: { $0.editorDocument.isDirty }) else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = "Quit and discard unsaved edits?"
+        alert.informativeText = "Copy or save your editor changes before quitting to keep them."
+        alert.addButton(withTitle: "Keep Editing")
+        alert.addButton(withTitle: "Quit")
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
 
     func applicationWillTerminate(_ notification: Notification) {

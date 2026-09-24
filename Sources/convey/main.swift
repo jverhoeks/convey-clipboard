@@ -42,10 +42,18 @@ func run() async -> Int32 {
         let snapshot = SystemPasteboard()
 
         // Text edges accept piped stdin; otherwise read from the clipboard.
-        let stdinText = readPipedStdin()
+        let stdinData = from == .image ? nil : readPipedStdin()
         let input: Payload?
-        if let stdinText, from != .image {
-            input = .text(stdinText)
+        if let stdinData {
+            if from == .rtf {
+                input = .bytes(stdinData)
+            } else {
+                guard let text = String(data: stdinData, encoding: .utf8) else {
+                    FileHandle.standardError.write(Data("convey: stdin must be UTF-8 text\n".utf8))
+                    return 1
+                }
+                input = .text(text)
+            }
         } else {
             input = reader.payload(for: from, from: snapshot)
         }
@@ -59,9 +67,11 @@ func run() async -> Int32 {
             // Route by whether stdin was actually USED as input, not merely present:
             // img2b64 reads the image from the clipboard even if stdin is piped, so
             // stdin-presence alone would misroute its data-URI to stdout.
-            let usedStdin = (stdinText != nil && from != .image)
-            if usedStdin, case let .text(out) = result {
-                print(out)
+            if stdinData != nil {
+                switch result {
+                case let .text(out): print(out)
+                case let .bytes(out): FileHandle.standardOutput.write(out)
+                }
             } else {
                 PasteboardWriter().write(result, as: to, to: .general)
                 FileHandle.standardError.write(Data("convey: wrote \(to.rawValue) to clipboard\n".utf8))
@@ -74,15 +84,16 @@ func run() async -> Int32 {
     }
 }
 
-func readPipedStdin() -> String? {
+func readPipedStdin() -> Data? {
     guard isatty(fileno(stdin)) == 0 else { return nil }
     let data = FileHandle.standardInput.readDataToEndOfFile()
     guard !data.isEmpty else { return nil }
-    return String(data: data, encoding: .utf8)
+    return data
 }
 
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
+app.finishLaunching()
 
 Task { @MainActor in
     let code = await run()

@@ -13,7 +13,7 @@ public final class PreviewCache {
 
     public init(convey: Convey, capacity: Int = 100) {
         self.convey = convey
-        self.capacity = capacity
+        self.capacity = max(0, capacity)
     }
 
     /// Already-computed image for this id, if any (sync, for immediate display).

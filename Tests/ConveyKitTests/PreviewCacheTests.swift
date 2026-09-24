@@ -37,4 +37,15 @@ final class PreviewCacheTests: XCTestCase {
         XCTAssertNotNil(cache.cached(b.id))
         XCTAssertNotNil(cache.cached(c.id))
     }
+
+    @MainActor
+    func testNonpositiveCapacityReturnsImageWithoutCaching() async throws {
+        for capacity in [0, -1] {
+            let cache = PreviewCache(convey: Convey(), capacity: capacity)
+            let entry = imageEntry(UUID(), png: try png())
+            let image = await cache.image(for: entry)
+            XCTAssertNotNil(image)
+            XCTAssertNil(cache.cached(entry.id))
+        }
+    }
 }

@@ -40,6 +40,6 @@ public struct ClipboardMonitor {
 
         return ClipboardEntry(id: id, sources: sources, kind: kind, primaryFormat: primaryFormat,
                               text: text, imageData: imageData, previewText: previewText, createdAt: now,
-                              isSecret: previewText.map(SecretDetector.looksLikeSecret) ?? false)
+                              isSecret: [previewText, text].compactMap { $0 }.contains(where: SecretDetector.looksLikeSecret))
     }
 }

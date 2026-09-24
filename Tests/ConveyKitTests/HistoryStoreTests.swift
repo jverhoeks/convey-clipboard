@@ -29,6 +29,31 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertTrue(s.entries.isEmpty)
     }
 
+    func testRemovePersistsOnlyRemainingEntries() throws {
+        let first = entry("first"), second = entry("second")
+        let store = HistoryStore()
+        store.add(first)
+        store.add(second)
+        store.remove(id: first.id)
+        store.remove(id: UUID())
+        XCTAssertEqual(store.entries, [second])
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let persistence = HistoryPersistence(directory: directory)
+        try persistence.save(store.entries)
+        XCTAssertEqual(persistence.load(), [second])
+    }
+
+    func testNonpositiveCapacityKeepsHistoryEmpty() {
+        for capacity in [0, -1] {
+            let store = HistoryStore(capacity: capacity)
+            store.add(entry("a"))
+            XCTAssertTrue(store.entries.isEmpty)
+            store.replaceAll([entry("b")])
+            XCTAssertTrue(store.entries.isEmpty)
+        }
+    }
+
     func testCrossTypeEntriesAreNotDuplicates() {
         let s = HistoryStore()
         let textEntry = entry("a")

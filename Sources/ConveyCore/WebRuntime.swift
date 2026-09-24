@@ -33,12 +33,15 @@ public final class WebRuntime: NSObject, WKNavigationDelegate {
         WKContentRuleListStore.default().compileContentRuleList(
             forIdentifier: "convey-block-remote",
             encodedContentRuleList: rules
-        ) { [weak self] list, _ in
+        ) { [weak self] list, error in
             // completion is on the main queue; hop to the actor to be safe.
             Task { @MainActor in
                 guard let self, let webView = self.webView else { return }
-                if let list { userContentController.add(list) }
-                // If compilation fails, proceed without the rule list rather than hang.
+                guard let list else {
+                    self.finishAll(with: error ?? ConversionError.engineFailed("could not block remote requests"))
+                    return
+                }
+                userContentController.add(list)
                 webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
             }
         }
@@ -70,6 +73,7 @@ public final class WebRuntime: NSObject, WKNavigationDelegate {
     }
 
     private func finishAll(with error: Error) {
+        isReady = false
         loadError = error
         let pending = waiters; waiters = []
         pending.forEach { $0.resume(throwing: error) }
@@ -78,4 +82,7 @@ public final class WebRuntime: NSObject, WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { finishReady() }
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finishAll(with: error) }
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finishAll(with: error) }
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        finishAll(with: ConversionError.engineFailed("web content process terminated"))
+    }
 }

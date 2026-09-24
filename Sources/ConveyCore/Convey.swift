@@ -8,6 +8,7 @@ public final class Convey {
         self.runtime = runtime
         graph = ConversionGraph([
             ImageToBase64Converter(),
+            ImageToTextConverter(),
             RTFToHTMLConverter(),
             HTMLToMarkdownConverter(runtime: runtime),
             HTMLToPlainTextConverter(runtime: runtime),

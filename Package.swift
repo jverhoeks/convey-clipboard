@@ -27,5 +27,6 @@ let package = Package(
         .target(name: "ConveyKit", dependencies: ["ConveyCore"]),
         .executableTarget(name: "ConveyApp", dependencies: ["ConveyCore", "ConveyKit"]),
         .testTarget(name: "ConveyKitTests", dependencies: ["ConveyKit"]),
+        .testTarget(name: "ConveyAppTests", dependencies: ["ConveyApp"]),
     ]
 )

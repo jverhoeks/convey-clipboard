@@ -24,6 +24,13 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(e?.text, "<b>x</b>")   // stores the rich payload so it stays reconvertible
         XCTAssertEqual(e?.previewText, "x")   // preview uses the readable plain-text fallback
     }
+
+    func testRichPayloadSecretIsDetectedEvenWithInnocentPreview() {
+        let snapshot = FakeSnapshot(availableTypes: ["public.html", "public.utf8-plain-text"],
+            strings: ["public.html": "<a href='https://example.test/?token=abcdefghijklmnopqrstuv'>Link</a>",
+                      "public.utf8-plain-text": "Link"])
+        XCTAssertEqual(monitor.makeEntry(from: snapshot, id: id, now: now)?.isSecret, true)
+    }
     func testBuildsRtfEntry() {
         let rtf = Data([1, 2, 3])
         let s = FakeSnapshot(availableTypes: ["public.rtf"], datas: ["public.rtf": rtf])

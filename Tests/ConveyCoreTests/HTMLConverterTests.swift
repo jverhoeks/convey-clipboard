@@ -2,6 +2,16 @@ import XCTest
 @testable import ConveyCore
 
 final class HTMLConverterTests: XCTestCase {
+    @MainActor
+    func testStyleAndScriptContentDoNotLeakIntoConvertedText() async throws {
+        let runtime = WebRuntime()
+        let html = "<html><head><style>p { color: red; }</style></head><body><p>Hello</p><script>secretCode()</script></body></html>"
+        let markdown = try await HTMLToMarkdownConverter(runtime: runtime).convert(.text(html))
+        let text = try await HTMLToPlainTextConverter(runtime: runtime).convert(.text(html))
+        XCTAssertEqual(markdown.text, "Hello")
+        XCTAssertEqual(text.text, "Hello")
+    }
+
     private func fixture() throws -> String {
         let url = Bundle.module.url(forResource: "confluence", withExtension: "html", subdirectory: "Fixtures")!
         return try String(contentsOf: url, encoding: .utf8)

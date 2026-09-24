@@ -1,6 +1,12 @@
 const _turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
-window.htmlToMarkdown = (html) => _turndown.turndown(html);
+const contentDocument = (html) => {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script, style, noscript, template").forEach((el) => el.remove());
+  return doc;
+};
+
+window.htmlToMarkdown = (html) => _turndown.turndown(contentDocument(html).body);
 
 window.markdownToHtml = (md) => marked.parse(md);
 
@@ -10,7 +16,7 @@ window.htmlToPlainText = (html) => {
   // pasted HTML can't run JS in the page). textContent mashes block
   // elements together with no line breaks, so we insert "\n" ourselves
   // around <br> and common block-level elements before extracting it.
-  const doc = new DOMParser().parseFromString(html, "text/html");
+  const doc = contentDocument(html);
   doc.body.querySelectorAll("br").forEach((el) => el.replaceWith("\n"));
   doc.body
     .querySelectorAll("p, div, li, tr, h1, h2, h3, h4, h5, h6, blockquote, pre")

@@ -10,6 +10,8 @@ struct EntryRowView: View {
     let onConvert: (ClipboardEntry, Format) -> Void
     let onSave: (ClipboardEntry, Format) -> Void
     let onOpen: (ClipboardEntry) -> Void
+    let onEdit: (ClipboardEntry) -> Void
+    let onRemove: (ClipboardEntry) -> Void
     let cache: PreviewCache
 
     // Backed by `PreviewCache`, which persists across row recycling in the
@@ -26,25 +28,45 @@ struct EntryRowView: View {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.secondary.opacity(0.2))
                     .clipShape(Capsule())
+                Button { onRemove(entry) } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Remove from history")
+                .accessibilityLabel("Remove from history")
                 if entry.isSecret { Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.orange) }
                 Spacer()
                 actionsMenu
+                    .disabled(entry.isSecret && !revealed)
             }
             if entry.isSecret && !revealed {
                 Button { reveal() } label: {
                     Label("Looks like a secret — click to reveal", systemImage: "eye.slash")
                 }.buttonStyle(.borderless).font(.callout)
             } else if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Button { onEdit(entry) } label: {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: 120)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open in editor")
             } else {
-                Text(entry.previewText.map { PreviewText.snippet($0) } ?? "(no preview)")
-                    .font(.system(.body, design: .rounded))
-                    .lineLimit(3)
-                    .foregroundStyle(.primary)
+                Button { onEdit(entry) } label: {
+                    Text(entry.previewText.map { PreviewText.snippet($0) } ?? "(no preview)")
+                        .font(.system(.body, design: .rounded))
+                        .lineLimit(3)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open in editor")
             }
         }
         .padding(10)
@@ -58,13 +80,15 @@ struct EntryRowView: View {
 
     private var actionsMenu: some View {
         Menu {
+            Button("Edit…") { onEdit(entry) }
+            Divider()
             if !targets.isEmpty {
                 Section("Convert clipboard to") {
-                    ForEach(targets, id: \.self) { t in Button(t.rawValue) { onConvert(entry, t) } }
+                    ForEach(targets, id: \.self) { t in Button(t == .plainText ? "Text" : t.rawValue) { onConvert(entry, t) } }
                 }
             }
             Section("Save as…") {
-                ForEach([entry.primaryFormat] + targets, id: \.self) { t in Button(t.rawValue) { onSave(entry, t) } }
+                ForEach([entry.primaryFormat] + targets, id: \.self) { t in Button(t == .plainText ? "Text (.txt)" : t.rawValue) { onSave(entry, t) } }
             }
             Button("Open in default app") { onOpen(entry) }
         } label: { Image(systemName: "ellipsis.circle") }
@@ -73,7 +97,7 @@ struct EntryRowView: View {
 
     private func reveal() {
         let ctx = LAContext()
-        guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else { revealed = true; return }
+        guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else { NSSound.beep(); return }
         ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "reveal a clipboard entry that looks like a secret") { ok, _ in
             Task { @MainActor in revealed = ok }
         }

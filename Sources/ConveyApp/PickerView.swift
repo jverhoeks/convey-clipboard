@@ -9,6 +9,8 @@ struct PickerView: View {
     let onConvert: (ClipboardEntry, Format) -> Void
     let onSave: (ClipboardEntry, Format) -> Void
     let onOpen: (ClipboardEntry) -> Void
+    let onEdit: (ClipboardEntry) -> Void
+    let onRemove: (ClipboardEntry) -> Void
     let onClear: () -> Void
     let onPreferences: () -> Void
     let cache: PreviewCache
@@ -19,7 +21,12 @@ struct PickerView: View {
                 Text("Convey").font(.headline)
                 Spacer()
                 Button("Clear", action: onClear).buttonStyle(.borderless).font(.caption)
-                Button(action: onPreferences) { Image(systemName: "gearshape") }.buttonStyle(.borderless)
+                Menu {
+                    Button("Preferences…", action: onPreferences)
+                    Divider()
+                    Button("Quit Convey") { NSApp.terminate(nil) }
+                } label: { Image(systemName: "gearshape") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
             .padding(10)
             Divider()
@@ -37,6 +44,8 @@ struct PickerView: View {
                             onConvert: onConvert,
                             onSave: onSave,
                             onOpen: onOpen,
+                            onEdit: onEdit,
+                            onRemove: onRemove,
                             cache: cache
                         )
                     }

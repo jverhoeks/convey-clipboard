@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test before packaging
+        run: swift test
+
       - name: Derive version from tag
         id: version
         env:
@@ -50,6 +53,11 @@ jobs:
         run: |
           file "$BIN/convey" "$BIN/convey-app"
           lipo -info "$BIN/convey"
+          for executable in convey convey-app; do
+            for architecture in arm64 x86_64; do
+              lipo "$BIN/$executable" -verify_arch "$architecture"
+            done
+          done
 
       - name: Package Convey.app
         id: pkg
@@ -72,12 +80,11 @@ jobs:
           VALUE: ${{ steps.version.outputs.value }}
           ARCHIVE: ${{ steps.pkg.outputs.archive }}
         run: |
-          # WebKit conversions can't run headless, so verify structurally.
+          bash Packaging/verify-bundle.sh Convey.app
           listing="$(unzip -Z1 "$ARCHIVE")"
           echo "$listing"
           for f in Convey.app/Contents/Info.plist Convey.app/Contents/MacOS/convey-app Convey.app/Contents/MacOS/convey \
-                   Convey.app/Contents/Resources/Convey_ConveyCore.bundle/Contents/Resources/web/runtime.html \
-                   Convey.app/Contents/Resources/Convey_ConveyCore.bundle/Contents/Resources/web/mermaid.min.js; do
+                   Convey.app/Contents/Resources/Convey.icns; do
             printf '%s\n' "$listing" | grep -Fqx "$f" || { echo "MISSING from archive: $f" >&2; exit 1; }
           done
           test "$(Convey.app/Contents/MacOS/convey version)" = "$VALUE"
