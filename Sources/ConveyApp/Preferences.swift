@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
+import ServiceManagement
 
 /// One recordable global hotkey, persisted in UserDefaults as "keyCode|carbonModifiers|label".
 /// Empty string = disabled.
@@ -48,6 +49,9 @@ struct HotKeySpec: Equatable {
     static func cmdShift(_ code: Int, _ ch: String) -> HotKeySpec {
         HotKeySpec(keyCode: UInt32(code), modifiers: UInt32(cmdKey | shiftKey), label: "⇧⌘" + ch)
     }
+    static func cmdShiftOption(_ code: Int, _ ch: String) -> HotKeySpec {
+        HotKeySpec(keyCode: UInt32(code), modifiers: UInt32(cmdKey | shiftKey | optionKey), label: "⌥⇧⌘" + ch)
+    }
 }
 
 enum Prefs {
@@ -55,7 +59,12 @@ enum Prefs {
     /// creating a suite whose name is the running app's own bundle identifier.
     /// The explicit suite keeps an unbundled developer executable on that domain too.
     static let store: UserDefaults = {
-        let domain = "com.jverhoeks.convey"
+        let domain = "org.verhoeks.convey"
+        // One-time carry-over of hotkeys/settings from the pre-rename bundle id.
+        if UserDefaults.standard.persistentDomain(forName: domain) == nil,
+           let old = UserDefaults.standard.persistentDomain(forName: "com.jverhoeks.convey") {
+            UserDefaults.standard.setPersistentDomain(old, forName: domain)
+        }
         if Bundle.main.bundleIdentifier == domain { return .standard }
         return UserDefaults(suiteName: domain) ?? .standard
     }()
@@ -65,30 +74,29 @@ enum Prefs {
         "hotkey.screen": HotKeySpec.cmdShift(kVK_ANSI_0, "0").stored,
         "hotkey.area":   HotKeySpec.cmdShift(kVK_ANSI_1, "1").stored,
         "hotkey.window": HotKeySpec.cmdShift(kVK_ANSI_2, "2").stored,
+        "hotkey.recordScreen": HotKeySpec.cmdShiftOption(kVK_ANSI_0, "0").stored,
+        "hotkey.recordArea":   HotKeySpec.cmdShiftOption(kVK_ANSI_1, "1").stored,
+        "hotkey.recordWindow": HotKeySpec.cmdShiftOption(kVK_ANSI_2, "2").stored,
         "screenshotPrefix": "Convey",
         "screenshotDirectory": "~/Pictures/Convey",
         "screenshotCopy": true,
         "screenshotSave": true,
+        "screenshotEdit": false,
+        "controlEnabled": false,
     ]
     static let suspendedKey = "hotkeysSuspended"  // true only while a HotKeyField is recording
     static func hotKey(_ key: String) -> HotKeySpec? {
         HotKeySpec(store.string(forKey: key) ?? "")
     }
 
-    // Start on login via a LaunchAgent: works for both `make run` (bare binary) and Convey.app.
-    static let agentURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/LaunchAgents/convey-app.plist")
-    static var startsOnLogin: Bool { FileManager.default.fileExists(atPath: agentURL.path) }
+    // Start on login as a proper Login Item (listed as "Convey", follows the app if moved).
+    // Needs the Convey.app bundle; the bare debug binary gets an error alert.
+    static var startsOnLogin: Bool { SMAppService.mainApp.status == .enabled }
     static func setStartsOnLogin(_ on: Bool) throws {
-        if on {
-            let plist: [String: Any] = ["Label": "convey-app", "RunAtLoad": true,
-                                        "ProgramArguments": [Bundle.main.executablePath ?? CommandLine.arguments[0]]]
-            try FileManager.default.createDirectory(at: agentURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: agentURL, options: .atomic)
-        } else {
-            // Removing the plist disables the next login without unloading/killing this running app.
-            if startsOnLogin { try FileManager.default.removeItem(at: agentURL) }
-        }
+        // Drop the LaunchAgent older builds wrote, so login doesn't start two copies.
+        try? FileManager.default.removeItem(at: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents/convey-app.plist"))
+        if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
     }
 }
 
@@ -143,8 +151,11 @@ struct PreferencesView: View {
     @AppStorage("screenshotDirectory", store: Prefs.store) var directory = "~/Pictures/Convey"
     @AppStorage("screenshotCopy", store: Prefs.store) var copy = true
     @AppStorage("screenshotSave", store: Prefs.store) var save = true
+    @AppStorage("screenshotEdit", store: Prefs.store) var edit = false
+    @AppStorage("controlEnabled", store: Prefs.store) var control = false
     @State private var login = Prefs.startsOnLogin
     @State private var loginError: String?
+    @State private var permitted = CGPreflightScreenCaptureAccess()
 
     var body: some View {
         Form {
@@ -156,10 +167,11 @@ struct PreferencesView: View {
                         catch { loginError = error.localizedDescription; login = Prefs.startsOnLogin }
                     }
                 TextField("Default filename prefix", text: $prefix)
-                Button("Screen Recording permission…") {
-                    if !CGRequestScreenCaptureAccess() {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-                    }
+                Toggle("Allow command-line control", isOn: $control)
+                    .help("Lets `convey shot/record/windows` (scripts, AI agents) capture through Convey's Screen Recording permission. Only your own user account can connect.")
+                LabeledContent("Screen Recording") {
+                    if permitted { Text("Allowed").foregroundStyle(.secondary) }
+                    else { Button("Allow…") { Screenshot.requestPermission() } }
                 }
             }
             Section("Global Hotkeys") {
@@ -167,16 +179,20 @@ struct PreferencesView: View {
                 HotKeyField("Area screenshot", key: "hotkey.area")
                 HotKeyField("Window screenshot", key: "hotkey.window")
                 HotKeyField("Fullscreen screenshot", key: "hotkey.screen")
+                HotKeyField("Record area", key: "hotkey.recordArea")
+                HotKeyField("Record window", key: "hotkey.recordWindow")
+                HotKeyField("Record screen", key: "hotkey.recordScreen")
             }
-            Section("Screenshot Destinations") {
+            Section("Capture Destinations") {
                 Toggle("Always copy to clipboard", isOn: $copy)
                 Toggle("Always save to folder", isOn: $save)
+                Toggle("Open screenshots in the editor", isOn: $edit)
                 TextField("Folder", text: $directory).disabled(!save)
             }
         }
         .formStyle(.grouped)
         .defaultAppStorage(Prefs.store)
-        .frame(width: 440, height: 600)
+        .frame(width: 440, height: 720)
         .alert("Could not update login setting", isPresented: Binding(get: { loginError != nil }, set: { if !$0 { loginError = nil } })) {
             Button("OK") { loginError = nil }
         } message: { Text(loginError ?? "") }

@@ -59,17 +59,59 @@ jobs:
             done
           done
 
+      # Optional Developer ID signing + notarization. Without these secrets the release
+      # stays ad-hoc signed. Secrets: DEVELOPER_ID_P12 (base64 .p12), DEVELOPER_ID_P12_PASSWORD,
+      # APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD (app-specific password).
+      - name: Import Developer ID certificate
+        id: sign
+        env:
+          P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          if [ -z "$P12" ]; then echo "identity=-" >> "$GITHUB_OUTPUT"; exit 0; fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -n1 | tr -d '"')"
+          test -n "$identity"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+
       - name: Package Convey.app
-        id: pkg
         env:
           VALUE: ${{ steps.version.outputs.value }}
-          TAG: ${{ steps.version.outputs.tag }}
           BIN: ${{ steps.bin.outputs.dir }}
+          IDENTITY: ${{ steps.sign.outputs.identity }}
         run: |
           # Bundles convey-app, the convey CLI and the ConveyCore resource bundle
           # (vendored turndown/marked/mermaid; without it the binary crashes with
           # "unable to find bundle Convey_ConveyCore").
-          make bundle VERSION="$VALUE" BIN_DIR="$BIN"
+          make bundle VERSION="$VALUE" BIN_DIR="$BIN" CODE_SIGN_IDENTITY="$IDENTITY"
+
+      - name: Notarize and staple
+        if: steps.sign.outputs.identity != '-'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent Convey.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple Convey.app
+          spctl --assess --type execute --verbose Convey.app
+
+      - name: Archive
+        id: pkg
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
           archive="Convey-$TAG-macos-universal.zip"
           ditto -c -k --keepParent Convey.app "$archive"
           shasum -a 256 "$archive" > "$archive.sha256"

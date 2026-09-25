@@ -13,12 +13,26 @@ struct PickerView: View {
     let onRemove: (ClipboardEntry) -> Void
     let onClear: () -> Void
     let onPreferences: () -> Void
+    let onCapture: (CaptureAction) -> Void
     let cache: PreviewCache
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Convey").font(.headline)
+                Spacer()
+                // Screenshot group, then the same three shapes in red for video recording.
+                ForEach(CaptureAction.all) { action in
+                    if action.id == 3 { Divider().frame(height: 14) }
+                    Button { onCapture(action) } label: {
+                        Image(systemName: action.symbol)
+                            .foregroundStyle(action.record ? Color.red : Color.primary)
+                            .frame(width: 22, height: 18)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(action.help)
+                    .accessibilityLabel(action.title)
+                }
                 Spacer()
                 Button("Clear", action: onClear).buttonStyle(.borderless).font(.caption)
                 Menu {

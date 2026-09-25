@@ -30,12 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // A text glyph is more robust than relying on an SF Symbol: if symbol lookup
-        // fails, AppKit otherwise leaves a zero-width, invisible menu-bar item.
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.isVisible = true
         if let button = statusItem.button {
-            button.title = "⇄"
+            button.image = StatusIcon.idle
+            button.imagePosition = .imageLeading
             button.toolTip = "Convey Clipboard"
             button.setAccessibilityLabel("Convey Clipboard")
             button.action = #selector(togglePopover)
@@ -46,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentSize = NSSize(width: 380, height: 480)
         popover.contentViewController = makePickerController()
 
+        Screenshot.openInEditor = { [weak self] png in self?.editCapture(png) }
+        Recorder.onChange = { [weak self] started in self?.showRecording(since: started) }
+
+        ControlServer.start()
         Prefs.store.removeObject(forKey: Prefs.suspendedKey)  // stale if we died mid-recording
         registerHotKeys()
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: Prefs.store, queue: .main) { [weak self] _ in
@@ -59,12 +62,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ("hotkey.screen", { Screenshot.capture(.screen) }),
             ("hotkey.area",   { Screenshot.capture(.area) }),
             ("hotkey.window", { Screenshot.capture(.window) }),
+            ("hotkey.recordScreen", { Recorder.toggle(.screen) }),
+            ("hotkey.recordArea",   { Recorder.toggle(.area) }),
+            ("hotkey.recordWindow", { Recorder.toggle(.window) }),
         ]
         hotKeys = []  // unregister old ones first
         guard !Prefs.store.bool(forKey: Prefs.suspendedKey) else { return }
         hotKeys = bindings.compactMap { key, action in
             Prefs.hotKey(key).flatMap { HotKey(keyCode: $0.keyCode, modifiers: $0.modifiers, handler: action) }
         }
+    }
+
+    // Re-opening Convey.app (Finder/Spotlight) shows Preferences: the only entry point when
+    // macOS hides the menu-bar icon (System Settings › Menu Bar, or a crowded notch).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showPreferences()
+        return false
     }
 
     private func installEditingMenu() {
@@ -105,7 +118,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
         } catch { showConversionError(error) }
     }
+    /// A fresh capture straight into the annotation editor (Greenshot's "open in editor" destination).
+    private func editCapture(_ png: Data) {
+        edit(ClipboardEntry(id: UUID(), sources: [.image], kind: .image, primaryFormat: .image,
+                            text: nil, imageData: png, previewText: nil, createdAt: Date()))
+    }
+
+    private var recordingTimer: Timer?
+    private func showRecording(since start: Date?) {
+        recordingTimer?.invalidate(); recordingTimer = nil
+        guard let button = statusItem.button else { return }
+        guard let start else {
+            button.image = StatusIcon.idle; button.title = ""; button.toolTip = "Convey Clipboard"
+            return
+        }
+        button.image = StatusIcon.recording
+        button.toolTip = "Recording — click to stop"
+        let tick = { [weak button] in
+            let s = Int(Date().timeIntervalSince(start))
+            button?.attributedTitle = NSAttributedString(string: String(format: " %d:%02d", s / 60, s % 60),
+                attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)])
+        }
+        tick()
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in tick() }
+    }
+
     @objc private func openPreferences() { showPreferences() }
+    @objc private func menuCapture(_ item: NSMenuItem) { CaptureAction.all[item.tag].perform() }
     private func showPreferences() {
         popover.performClose(nil)
         if prefsWindow == nil {
@@ -134,6 +173,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.persistHistory()
             },
             onPreferences: { [weak self] in self?.showPreferences() },
+            onCapture: { [weak self] action in
+                self?.popover.performClose(nil)
+                action.perform()
+            },
             cache: previewCache
         )
         return NSHostingController(rootView: view)
@@ -192,8 +235,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func togglePopover() {
         guard let button = statusItem.button else { return }
-        if NSApp.currentEvent?.type == .rightMouseUp {
+        let rightClick = NSApp.currentEvent?.type == .rightMouseUp
+        if Recorder.isRecording, !rightClick { Recorder.stop(); return }
+        if rightClick {
             let menu = NSMenu()
+            if Recorder.isRecording {
+                menu.addItem(withTitle: "Stop Recording", action: #selector(stopRecording), keyEquivalent: "").target = self
+            } else {
+                for action in CaptureAction.all {
+                    if action.id == 3 { menu.addItem(.separator()) }
+                    let item = menu.addItem(withTitle: action.help, action: #selector(menuCapture(_:)), keyEquivalent: "")
+                    item.target = self; item.tag = action.id
+                }
+            }
+            menu.addItem(.separator())
             menu.addItem(withTitle: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",").target = self
             menu.addItem(.separator())
             menu.addItem(withTitle: "Quit Convey", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -207,6 +262,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.contentViewController?.view.window?.makeKey()
         }
     }
+
+    @objc private func stopRecording() { Recorder.stop() }
 
     private func pollClipboard() {
         let pb = NSPasteboard.general
@@ -234,6 +291,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        Recorder.stop()
         saveQueue.sync { try? self.persistence.save(self.history.entries) }
     }
+}
+
+/// Menu-bar artwork: the app icon's clipboard with ⇄, drawn as a full-height template image
+/// (a text glyph rendered tiny, and SF Symbol lookup can fail and leave an invisible item).
+enum StatusIcon {
+    static let idle: NSImage = {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+            NSColor.black.set()
+            let board = NSBezierPath(roundedRect: NSRect(x: 2.75, y: 0.75, width: 12.5, height: 14.5), xRadius: 2.5, yRadius: 2.5)
+            board.lineWidth = 1.5
+            board.stroke()
+            NSBezierPath(roundedRect: NSRect(x: 5.5, y: 13.5, width: 7, height: 4), xRadius: 1.5, yRadius: 1.5).fill()
+            let arrows = NSBezierPath()
+            arrows.move(to: NSPoint(x: 5.5, y: 9.5)); arrows.line(to: NSPoint(x: 12.5, y: 9.5))    // →
+            arrows.move(to: NSPoint(x: 10.3, y: 11.7)); arrows.line(to: NSPoint(x: 12.5, y: 9.5)); arrows.line(to: NSPoint(x: 10.3, y: 7.3))
+            arrows.move(to: NSPoint(x: 12.5, y: 5)); arrows.line(to: NSPoint(x: 5.5, y: 5))        // ←
+            arrows.move(to: NSPoint(x: 7.7, y: 7.2)); arrows.line(to: NSPoint(x: 5.5, y: 5)); arrows.line(to: NSPoint(x: 7.7, y: 2.8))
+            arrows.lineWidth = 1.5
+            arrows.lineCapStyle = .round
+            arrows.lineJoinStyle = .round
+            arrows.stroke()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Convey Clipboard"
+        return image
+    }()
+
+    static let recording: NSImage = {
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            NSColor.white.setFill()
+            NSBezierPath(roundedRect: rect.insetBy(dx: 5, dy: 5), xRadius: 1, yRadius: 1).fill()  // stop square
+            return true
+        }
+        image.accessibilityDescription = "Stop recording"
+        return image
+    }()
 }

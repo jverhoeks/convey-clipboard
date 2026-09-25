@@ -9,17 +9,50 @@ import ConveyCore
 enum Screenshot {
     enum Mode { case screen, window, area }
 
+    /// Set by the app delegate: opens a capture in the annotation editor.
+    @MainActor static var openInEditor: ((Data) -> Void)?
+
+    @MainActor
+    static func ensurePermission() -> Bool {
+        if CGPreflightScreenCaptureAccess() { return true }
+        requestPermission()
+        return false
+    }
+
+    /// Preflight alone never adds Convey to System Settings › Screen Recording. A real
+    /// ScreenCaptureKit query does: it registers the app and shows the system prompt.
+    @MainActor
+    static func requestPermission() {
+        CGRequestScreenCaptureAccess()
+        Task { _ = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true) }
+        let alert = NSAlert()
+        alert.messageText = "Allow Convey to record the screen"
+        alert.informativeText = "Turn on Convey in System Settings › Privacy & Security › Screen & System Audio Recording. macOS applies it after Convey restarts."
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Quit & Reopen")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+        case .alertSecondButtonReturn:
+            // Relaunch after we exit; the single-instance lock would refuse a copy started now.
+            if Bundle.main.bundlePath.hasSuffix(".app") {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/bin/sh")
+                p.arguments = ["-c", "sleep 1; open \"$0\"", Bundle.main.bundlePath]
+                try? p.run()
+            }
+            NSApp.terminate(nil)
+        default: break
+        }
+    }
+
     @MainActor
     static func capture(_ mode: Mode) {
         let d = Prefs.store
-        guard d.bool(forKey: "screenshotSave") || d.bool(forKey: "screenshotCopy") else { NSSound.beep(); return }
-        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
-            let alert = NSAlert()
-            alert.messageText = "Screen Recording permission is required"
-            alert.informativeText = "Allow Convey in System Settings → Privacy & Security → Screen Recording, then restart Convey if macOS asks."
-            alert.runModal()
-            return
-        }
+        guard ["screenshotSave", "screenshotCopy", "screenshotEdit"].contains(where: d.bool(forKey:)) else { NSSound.beep(); return }
+        guard ensurePermission() else { return }
         switch mode {
         case .screen:
             guard let s = screenUnderMouse else { NSSound.beep(); return }
@@ -31,7 +64,7 @@ enum Screenshot {
             }
         case .window:
             if #available(macOS 14, *) {
-                Task { await WindowSelector.begin { deliver($0) } }
+                Task { await WindowSelector.begin { window, scale in Task { await captureWindow(window, scale: scale) } } }
             } else {
                 legacyWindowCapture()
             }
@@ -46,25 +79,30 @@ enum Screenshot {
     /// `rect` in global Cocoa coordinates (origin bottom-left); converted to the display's top-left point space.
     @MainActor
     private static func grab(_ screen: NSScreen, rect: NSRect) {
-        guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else { NSSound.beep(); return }
-        let local = SelectionGeometry.captureRect(rect, screenFrame: screen.frame)
         Task { @MainActor in
-            let cg: CGImage?
-            if #available(macOS 14, *) {
-                cg = try? await sckImage(display: id, rect: local, scale: screen.backingScaleFactor)
-            } else {
-                // Crop the actual framebuffer using its pixel dimensions, including Retina/scaled displays.
-                if let full = CGDisplayCreateImage(id) {
-                    let sx = CGFloat(full.width) / screen.frame.width
-                    let sy = CGFloat(full.height) / screen.frame.height
-                    cg = full.cropping(to: CGRect(x: local.minX * sx, y: local.minY * sy,
-                                                 width: local.width * sx, height: local.height * sy).integral)
-                } else { cg = nil }
-            }
-            guard let cg, let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
-            else { NSSound.beep(); return }
+            guard let png = await png(screen: screen, rect: rect) else { NSSound.beep(); return }
             deliver(png)
         }
+    }
+
+    /// PNG of `rect` (global Cocoa coordinates) on `screen`. No UI, no side effects.
+    @MainActor
+    static func png(screen: NSScreen, rect: NSRect) async -> Data? {
+        guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else { return nil }
+        let local = SelectionGeometry.captureRect(rect, screenFrame: screen.frame, scale: screen.backingScaleFactor)
+        let cg: CGImage?
+        if #available(macOS 14, *) {
+            cg = try? await sckImage(display: id, rect: local, scale: screen.backingScaleFactor)
+        } else {
+            // Crop the actual framebuffer using its pixel dimensions, including Retina/scaled displays.
+            if let full = CGDisplayCreateImage(id) {
+                let sx = CGFloat(full.width) / screen.frame.width
+                let sy = CGFloat(full.height) / screen.frame.height
+                cg = full.cropping(to: CGRect(x: local.minX * sx, y: local.minY * sy,
+                                             width: local.width * sx, height: local.height * sy).integral)
+            } else { cg = nil }
+        }
+        return cg.flatMap { NSBitmapImageRep(cgImage: $0).representation(using: .png, properties: [:]) }
     }
 
     @available(macOS 14, *)
@@ -73,31 +111,69 @@ enum Screenshot {
         guard let display = content.displays.first(where: { $0.displayID == id }) else { return nil }
         let cfg = SCStreamConfiguration()
         cfg.sourceRect = rect
-        cfg.width = Int(rect.width * scale); cfg.height = Int(rect.height * scale)
+        cfg.width = Int((rect.width * scale).rounded()); cfg.height = Int((rect.height * scale).rounded())
+        cfg.captureResolution = .best
         cfg.showsCursor = false
         return try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(display: display, excludingWindows: []),
                                                           configuration: cfg)
+    }
+
+    @available(macOS 14, *)
+    private static func captureWindow(_ window: SCWindow, scale: CGFloat) async {
+        guard let png = try? await windowPNG(window, scale: scale) else { NSSound.beep(); return }
+        await deliver(png)
+    }
+
+    @available(macOS 14, *)
+    static func windowPNG(_ window: SCWindow, scale: CGFloat) async throws -> Data {
+        let cfg = SCStreamConfiguration()
+        cfg.width = max(1, Int((window.frame.width * scale).rounded()))
+        cfg.height = max(1, Int((window.frame.height * scale).rounded()))
+        cfg.showsCursor = false
+        cfg.ignoreShadowsSingleWindow = true
+        let image = try await SCScreenshotManager.captureImage(
+            contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: cfg)
+        guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        else { throw EditorError.imageRendering }
+        return png
+    }
+
+    /// Where a capture is saved: the screenshot folder, or a temp file when saving is off
+    /// (recordings still need a file to put on the clipboard).
+    @MainActor
+    static func outputURL(extension ext: String) throws -> URL {
+        let d = Prefs.store
+        let fmt = DateFormatter(); fmt.dateFormat = "yyyy-MM-dd HH_mm_ss"
+        let prefix = (d.string(forKey: "screenshotPrefix") ?? "").replacingOccurrences(of: "/", with: "-")
+        let dir = d.bool(forKey: "screenshotSave")
+            ? URL(fileURLWithPath: ((d.string(forKey: "screenshotDirectory") ?? "~") as NSString).expandingTildeInPath)
+            : FileManager.default.temporaryDirectory
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let base = "\(prefix) \(fmt.string(from: Date()))".trimmingCharacters(in: .whitespaces)
+        var url = dir.appendingPathComponent("\(base).\(ext)"), n = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = dir.appendingPathComponent("\(base) \(n).\(ext)"); n += 1
+        }
+        return url
     }
 
     @MainActor
     private static func deliver(_ data: Data) {
         let d = Prefs.store
         if d.bool(forKey: "screenshotSave") {
-            let fmt = DateFormatter(); fmt.dateFormat = "yyyy-MM-dd HH_mm_ss"
-            let prefix = (d.string(forKey: "screenshotPrefix") ?? "").replacingOccurrences(of: "/", with: "-")
-            let name = "\(prefix) \(fmt.string(from: Date()))-\(UUID().uuidString).png"
-            let dir = URL(fileURLWithPath: ((d.string(forKey: "screenshotDirectory") ?? "~") as NSString).expandingTildeInPath)
-            do {
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                try data.write(to: dir.appendingPathComponent(name.trimmingCharacters(in: .whitespaces)), options: .atomic)
-            } catch {
-                let alert = NSAlert()
-                alert.messageText = "Could not save screenshot"
-                alert.informativeText = error.localizedDescription
-                alert.runModal()
-            }
+            do { try data.write(to: outputURL(extension: "png"), options: .atomic) }
+            catch { alert("Could not save screenshot", error) }
         }
         if d.bool(forKey: "screenshotCopy") { PasteboardWriter().write(.bytes(data), as: .png, to: .general) }
+        if d.bool(forKey: "screenshotEdit") { openInEditor?(data) }
+    }
+
+    @MainActor
+    static func alert(_ title: String, _ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = error.localizedDescription
+        alert.runModal()
     }
 
     /// macOS 13 has no SCScreenshotManager. Interactive `screencapture` is the fallback.
@@ -221,13 +297,24 @@ final class AreaSelector: NSWindow {
                 axes.stroke()
             }
             NSColor.white.setStroke(); NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5)).stroke()
+            guard rect.width >= 1, rect.height >= 1 else { return }
+            // Size in pixels, as the saved PNG will be, just below the selection.
+            let scale = window?.backingScaleFactor ?? 1
+            let label = "\(Int(rect.width * scale)) × \(Int(rect.height * scale))" as NSString
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white]
+            let size = label.size(withAttributes: attrs)
+            var pill = NSRect(x: rect.minX, y: rect.minY - size.height - 10, width: size.width + 12, height: size.height + 4)
+            if pill.minY < bounds.minY { pill.origin.y = rect.minY + 4 }
+            NSColor.black.withAlphaComponent(0.7).setFill()
+            NSBezierPath(roundedRect: pill, xRadius: 4, yRadius: 4).fill()
+            label.draw(at: NSPoint(x: pill.minX + 6, y: pill.minY + 2), withAttributes: attrs)
         }
     }
 }
 
-/// Click the window under the cursor. Escape cancels. The overlay is not part of the capture:
-/// ScreenCaptureKit is asked for that window alone.
-@available(macOS 14, *)
+/// Click the window under the cursor. Escape cancels. Hands back the ScreenCaptureKit window
+/// and its display scale; the overlay is never part of the capture, which targets that window alone.
 @MainActor
 final class WindowSelector: NSWindow {
     private struct Candidate {
@@ -239,10 +326,10 @@ final class WindowSelector: NSWindow {
     private static var active: [WindowSelector] = []
     private static var candidates: [Candidate] = []
     private static var highlight: Candidate?
-    private static var deliver: ((Data) -> Void)?
+    private static var pick: ((SCWindow, CGFloat) -> Void)?
     private let view = HighlightView()
 
-    static func begin(deliver: @escaping (Data) -> Void) async {
+    static func begin(_ pick: @escaping (SCWindow, CGFloat) -> Void) async {
         guard active.isEmpty else { return }
         let content: SCShareableContent
         do { content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true) }
@@ -256,7 +343,7 @@ final class WindowSelector: NSWindow {
                              title: window.title)
         }
         guard !candidates.isEmpty else { NSSound.beep(); return }
-        self.deliver = deliver
+        self.pick = pick
         active = NSScreen.screens.map(WindowSelector.init)
         NSApp.activate(ignoringOtherApps: true)
         active.forEach { $0.makeKeyAndOrderFront(nil) }
@@ -280,34 +367,17 @@ final class WindowSelector: NSWindow {
         active = []
         highlight = nil
         candidates = []
-        deliver = nil
+        pick = nil
         windows.forEach { $0.orderOut(nil) }
         NSCursor.arrow.set()
     }
 
     private static func choose(_ candidate: Candidate) {
-        let deliver = deliver
+        let pick = pick
         finish()
-        guard let deliver else { return }
-        Task { await capture(candidate, deliver: deliver) }
-    }
-
-    private static func capture(_ candidate: Candidate, deliver: @escaping (Data) -> Void) async {
         let center = CGPoint(x: candidate.frame.midX, y: candidate.frame.midY)
         let screen = NSScreen.screens.first { NSMouseInRect(center, $0.frame, false) } ?? NSScreen.main
-        let scale = screen?.backingScaleFactor ?? 2
-        let cfg = SCStreamConfiguration()
-        cfg.width = max(1, Int((candidate.window.frame.width * scale).rounded()))
-        cfg.height = max(1, Int((candidate.window.frame.height * scale).rounded()))
-        cfg.showsCursor = false
-        cfg.ignoreShadowsSingleWindow = true
-        do {
-            let image = try await SCScreenshotManager.captureImage(
-                contentFilter: SCContentFilter(desktopIndependentWindow: candidate.window), configuration: cfg)
-            guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
-            else { NSSound.beep(); return }
-            deliver(png)
-        } catch { NSSound.beep() }
+        pick?(candidate.window, screen?.backingScaleFactor ?? 2)
     }
 
     init(screen: NSScreen) {

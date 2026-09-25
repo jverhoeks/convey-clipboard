@@ -3,7 +3,7 @@ set -euo pipefail
 app="${1:-Convey.app}"
 plist="$app/Contents/Info.plist"
 plutil -lint "$plist"
-test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$plist")" = com.jverhoeks.convey
+test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$plist")" = org.verhoeks.convey
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIconFile' "$plist")" = Convey.icns
 test -s "$app/Contents/Resources/Convey.icns"
 resources="$app/Contents/Resources/Convey_ConveyCore.bundle"

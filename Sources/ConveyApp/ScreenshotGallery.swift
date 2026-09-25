@@ -48,7 +48,7 @@ enum ScreenshotGallery {
             history: history,
             targetsFor: { convey.graph.validTargets(from: [$0.primaryFormat]) },
             onConvert: { _, _ in }, onSave: { _, _ in }, onOpen: { _ in }, onEdit: { _ in },
-            onRemove: { _ in }, onClear: {}, onPreferences: {}, cache: cache)
+            onRemove: { _ in }, onClear: {}, onPreferences: {}, onCapture: { _ in }, cache: cache)
         let popover = NSPopover()
         popover.behavior = .applicationDefined
         popover.contentSize = NSSize(width: 380, height: 480)

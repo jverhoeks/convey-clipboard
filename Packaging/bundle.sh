@@ -37,17 +37,15 @@ sed "s/@VERSION@/$version/g" Packaging/Info.plist > "$app/Contents/Info.plist"
 plutil -lint "$app/Contents/Info.plist"
 
 signing=(--force --sign "$identity")
-if [[ "$identity" != "-" ]]; then signing+=(--timestamp --options runtime); fi
+# Timestamp + hardened runtime are for Developer ID/notarization; a local self-signed identity skips them.
+if [[ "$identity" == "Developer ID"* ]]; then signing+=(--timestamp --options runtime); fi
 codesign "${signing[@]}" "$app/Contents/MacOS/convey"
 codesign "${signing[@]}" "$app"
 codesign --verify --deep --strict "$app"
 
-# Keep the previous local build recoverable until the new bundle is verified.
-if [[ -e Convey.app ]]; then
-    backup=$(mktemp -d .build/previous-bundle.XXXXXX)
-    mv Convey.app "$backup/Convey.app"
-    echo "Previous bundle preserved at $backup/Convey.app"
-fi
+# New bundle is already signed and verified; replace in place. Backups would each
+# register with LaunchServices and show up as duplicate "Convey" apps in System Settings.
+rm -rf Convey.app
 mv "$app" Convey.app
 rmdir "$stage"
 echo "Built Convey.app ($version), signing identity: $identity"

@@ -10,6 +10,16 @@ convey <command>
   rtf2md                      convert clipboard RTF to Markdown
   img2b64                     convert clipboard image to a base64 data-URI
   mmd2svg | mmd2png           render clipboard Mermaid text
+  rec [file.cast]             record this terminal (text + colors) as asciicast v2
+  play <file.cast>            replay a recording in the terminal
+
+Control the running Convey.app (needs Preferences › Allow command-line control):
+  windows [--json] [--all]    list windows: id, app, title, x,y,w,h (--all: other Spaces too)
+  shot   <target> [-o f.png]  screenshot; prints the file path
+  record <target> [-o f.mp4] [--duration secs]
+                              record video; without --duration, run `convey stop`
+  stop | status               finish the recording (prints path) / show state
+  <target>: screen [N] | window <id|app or title text> | area x,y,w,h (points, top-left)
   version | --version | -v    print the convey version
 
 Reads the clipboard, converts, writes the result back to the clipboard.
@@ -29,6 +39,15 @@ func run() async -> Int32 {
     case .version:
         print(conveyVersion)
         return 0
+
+    case let .rec(path):
+        return recordTerminal(to: path)
+
+    case let .play(path):
+        return playCast(path)
+
+    case let .control(args):
+        return control(args)
 
     case .list:
         let sources = PasteboardReader().sources(from: SystemPasteboard())

@@ -8,7 +8,7 @@ PREFIX ?= /usr/local
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build release test run cli app bundle icon verify-bundle archive cask clean install uninstall next-version patch minor major screenshots _bump
+.PHONY: help build release test run dev-cert cli app bundle icon verify-bundle archive notarize cask clean install uninstall next-version patch minor major screenshots _bump
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -30,8 +30,14 @@ cli: ## Build the CLI, then print its usage
 app: ## Build the menu-bar app
 	$(SWIFT) build --product convey-app
 
+# Stable local signature so Screen Recording grants survive rebuilds (see `make dev-cert`).
+DEV_IDENTITY := $(shell security find-certificate -c "Convey Development" >/dev/null 2>&1 && echo "Convey Development" || echo -)
+
+dev-cert: ## One-time: create the local "Convey Development" signing identity used by `make run`
+	bash Packaging/dev-cert.sh
+
 run: ## Build and launch the app bundle (correct icon and permission identity)
-	$(MAKE) bundle CONFIGURATION=debug ARCHS=$$(uname -m)
+	$(MAKE) bundle CONFIGURATION=debug ARCHS=$$(uname -m) CODE_SIGN_IDENTITY="$(DEV_IDENTITY)"
 	@pkill -f "$(CURDIR)/Convey.app/Contents/MacOS/convey-app" 2>/dev/null || true
 	open Convey.app
 
@@ -63,6 +69,16 @@ archive: verify-bundle ## ZIP the verified universal app and write a SHA-256 che
 	shasum -a 256 "$$archive" > "$$archive.sha256"; \
 	echo "created $$archive"
 
+NOTARY_PROFILE ?= convey
+notarize: ## Notarize + staple a Developer ID-signed Convey.app, then re-archive (one-time: xcrun notarytool store-credentials convey)
+	@codesign -dv "$(APP)" 2>&1 | grep -q 'Authority=Developer ID Application' || { echo "error: $(APP) is not Developer ID signed; run make bundle CODE_SIGN_IDENTITY=\"Developer ID Application: …\"" >&2; exit 1; }
+	@mkdir -p .build
+	ditto -c -k --keepParent "$(APP)" .build/notarize.zip
+	xcrun notarytool submit .build/notarize.zip --keychain-profile "$(NOTARY_PROFILE)" --wait
+	xcrun stapler staple "$(APP)"
+	spctl --assess --type execute --verbose "$(APP)"
+	$(MAKE) --no-print-directory archive
+
 TAP ?= ../../homebrew-tap
 cask: ## Write Casks/convey.rb into $(TAP) for the latest GitHub release
 	@tag=$$(gh release view --json tagName -q .tagName); v=$${tag#v}; \
@@ -71,13 +87,23 @@ cask: ## Write Casks/convey.rb into $(TAP) for the latest GitHub release
 	sed -e "s/@VERSION@/$$v/" -e "s/@SHA256@/$$sha/" Packaging/convey.rb.tmpl > "$(TAP)/Casks/convey.rb"; \
 	echo "wrote $(TAP)/Casks/convey.rb for $$tag — commit & push the tap"
 
-install: release ## Install the release CLI to $(PREFIX)/bin
-	install -d "$(PREFIX)/bin"
-	install -m 0755 .build/release/convey "$(PREFIX)/bin/convey"
-	@echo "installed convey -> $(PREFIX)/bin/convey"
+APP_DIR ?= /Applications
+install: ## Install Convey.app into $(APP_DIR) and link the `convey` CLI into $(PREFIX)/bin (like the cask)
+	$(MAKE) bundle ARCHS=$$(uname -m) CODE_SIGN_IDENTITY="$(DEV_IDENTITY)"
+	@pkill -x convey-app 2>/dev/null && sleep 1 || true
+	@# Replace the contents, not the bundle: deleting an app in /Applications needs App Management permission.
+	rm -rf "$(APP_DIR)/Convey.app/Contents"
+	ditto Convey.app "$(APP_DIR)/Convey.app"
+	@# Only this step may need root (/usr/local/bin is root-owned); never build as root.
+	@{ mkdir -p "$(PREFIX)/bin" && ln -sf "$(APP_DIR)/Convey.app/Contents/MacOS/convey" "$(PREFIX)/bin/convey"; } 2>/dev/null \
+		|| sudo ln -sf "$(APP_DIR)/Convey.app/Contents/MacOS/convey" "$(PREFIX)/bin/convey"
+	open "$(APP_DIR)/Convey.app"
+	@echo "installed $(APP_DIR)/Convey.app and $(PREFIX)/bin/convey -> app"
 
-uninstall: ## Remove the installed CLI
-	rm -f "$(PREFIX)/bin/convey"
+uninstall: ## Remove Convey.app from $(APP_DIR) and the CLI link
+	@pkill -x convey-app 2>/dev/null || true
+	rm -rf "$(APP_DIR)/Convey.app"
+	rm -f "$(PREFIX)/bin/convey" 2>/dev/null || sudo rm -f "$(PREFIX)/bin/convey"
 
 clean: ## Remove build artifacts
 	$(SWIFT) package clean

@@ -47,4 +47,14 @@ final class SelectionGeometryTests: XCTestCase {
         XCTAssertEqual(SelectionGeometry.frontmost(containing: CGPoint(x: 100, y: 100), frames: frames), 1)
         XCTAssertNil(SelectionGeometry.frontmost(containing: CGPoint(x: -1, y: 10), frames: frames))
     }
+
+    func testCaptureRectSnapsFractionalMouseRectToWholePixels() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let drag = CGRect(x: 100.37, y: 200.2, width: 300.49, height: 99.6)
+        let r = SelectionGeometry.captureRect(drag, screenFrame: screen, scale: 2)
+        for v in [r.minX, r.minY, r.width, r.height] { XCTAssertEqual((v * 2).rounded(), v * 2) }
+        XCTAssertEqual(r.width, 300.5)
+        let video = SelectionGeometry.captureRect(drag, screenFrame: screen, scale: 1, even: true)
+        XCTAssertEqual(video.width, 300); XCTAssertEqual(video.height, 100)
+    }
 }

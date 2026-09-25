@@ -23,17 +23,48 @@ This repository ships:
     convey img2b64
     convey mmd2svg
     echo 'graph TD; A-->B' | convey mmd2png > diagram.png
+    convey rec demo.cast            # record this terminal (text + ANSI colors + timing)
+    convey play demo.cast           # replay it; idle pauses are capped at 2 s
     convey version                  # print the convey version
+
+`convey rec` wraps a new shell in macOS's built-in `script -r` and converts its
+log into [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/), so the
+file works with `asciinema play`, asciinema.org, the web player, and `agg` (GIF).
+Exit the shell (Ctrl-D) to stop. `$CONVEY_REC=1` is set inside, so a prompt can
+show that it's recording. It can't attach to a terminal window that's already
+open, because the app has no access to that window's pty.
+
+### Controlling the app from scripts and agents
+
+Turn on **Preferences › Allow command-line control**, and `convey` can drive the
+running Convey.app. The app does the capturing with its own Screen Recording
+permission, so the terminal or agent calling it doesn't need that permission.
+Every command prints the file path, or an error on stderr with exit code 1.
+
+    convey windows [--json] [--all]               # id, app, title, x,y,w,h (front to back; --all adds other Spaces)
+    convey shot window "Google Chrome" -o page.png
+    convey shot area 0,0,800,600                  # points, top-left origin, like screencapture -R
+    convey record window Terminal --duration 10 -o demo.mp4
+    convey record screen 1                        # second display; then:
+    convey status && convey stop                  # prints the .mp4 path
+
+A window can be given by its id from `convey windows`, or by part of its app name
+or title (the frontmost match wins). The app listens on
+`~/Library/Application Support/Convey/control.sock`. The socket file is readable
+and writable only by you, and the app also refuses connections from other users.
 
 ## Menu-bar app
 
-Run: `make run`. It rebuilds the app, quits an older instance launched from this
+Run: `make dev-cert` once, then `make run`. `dev-cert` creates a self-signed
+"Convey Development" signing identity in your login keychain. Without it the
+bundle is ad-hoc signed, so its identity changes with every build and macOS
+silently drops the Screen Recording grant after each rebuild. It rebuilds the app, quits an older instance launched from this
 checkout, and opens the fresh bundle so macOS sees the Convey icon and bundle
 identity in permission UI.
 
 <img src="docs/images/history.png" width="380" alt="Clipboard history. Rows show a type badge, a preview, remove, and an actions menu. A Mermaid diagram is rendered in place, and a credential is concealed.">
 
-A menu-bar ⇄ icon opens a visual clipboard list. Each entry shows a type
+A menu-bar clipboard icon opens a visual clipboard list. Each entry shows a type
 badge, a preview (text snippet / image thumbnail), and the valid convert
 options for that entry — click one to rewrite the clipboard, then ⌘V. Press
 ⌥⌘V to open the picker from anywhere. History persists across launches;
@@ -42,8 +73,18 @@ The circled × beside a row's type label removes that entry and persists the cha
 
 Screenshots (Greenshot-style): ⇧⌘0 full screen, ⇧⌘1 area, ⇧⌘2 then click a window
 (Escape cancels). The PNG
-is saved to `~/Pictures/Convey/Convey yyyy-MM-dd HH_mm_ss-<uuid>.png` and put on the
-clipboard (so it lands in history too). The gear in the picker opens
+is saved to `~/Pictures/Convey/Convey yyyy-MM-dd HH_mm_ss.png` and put on the
+clipboard (so it lands in history too). Turn on **Open screenshots in the editor**
+to go straight to annotating. The area selector shows the selection size in pixels.
+
+Screen recording: ⌥⇧⌘1 area, ⌥⇧⌘2 window, ⌥⇧⌘0 full screen. The menu-bar
+icon turns into a red stop button with a timer; click it or press any recording
+hotkey to stop. Area recordings show a dashed red frame that is not in the video.
+The MP4 (H.264; HEVC above 4096 px) is saved next to screenshots, revealed in
+Finder, and put on the clipboard as a file, so it pastes into Mail, Slack, or
+Messages. The picker's header has the same six actions as buttons: capture area, window,
+and screen, then record area, window, and screen (in red). Hover a button to see
+its hotkey. Right-clicking the menu-bar icon lists them too. The gear in the picker opens
 Preferences: rebind hotkeys, filename prefix, folder, copy/save toggles,
 start on login (LaunchAgent), and a button to grant Screen Recording.
 
@@ -88,7 +129,11 @@ before discarding them. RTF entries open as plain text for editing.
 brew install --cask --no-quarantine jverhoeks/tap/convey   # Convey.app + `convey` CLI
 ```
 
-Or build it yourself: `make bundle VERSION=0.2.0` produces an ad-hoc signed,
+Or build and install from source: `make install` puts Convey.app in `/Applications`
+(`APP_DIR=~/Applications` to change it) and links `convey` into `/usr/local/bin`,
+asking for sudo only for that link. `make uninstall` removes both.
+
+For a release build: `make bundle VERSION=0.2.0` produces an ad-hoc signed,
 universal `Convey.app` (menu-bar app, CLI, icon, and the ConveyCore resource bundle).
 It rebuilds from current sources; `BIN_DIR` is only for explicitly supplied
 prebuilt products. `make verify-bundle` checks it; `make archive` creates a ZIP

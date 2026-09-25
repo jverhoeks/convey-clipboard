@@ -28,4 +28,16 @@ final class CommandRouterTests: XCTestCase {
     func testEmptyIsUsage() {
         guard case .usage = parseCommand([]) else { return XCTFail("expected usage") }
     }
+
+    func testParsesRecAndPlay() {
+        XCTAssertEqual(parseCommand(["rec"]), .rec(nil))
+        XCTAssertEqual(parseCommand(["rec", "demo.cast"]), .rec("demo.cast"))
+        XCTAssertEqual(parseCommand(["play", "demo.cast"]), .play("demo.cast"))
+        XCTAssertEqual(parseCommand(["play"]), .usage)
+    }
+
+    func testControlVerbsAreForwarded() {
+        XCTAssertEqual(parseCommand(["record", "window", "Terminal"]), .control(["record", "window", "Terminal"]))
+        XCTAssertEqual(parseCommand(["windows"]), .control(["windows"]))
+    }
 }
