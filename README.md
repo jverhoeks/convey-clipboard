@@ -136,8 +136,12 @@ before discarding them. RTF entries open as plain text for editing.
 ### Install
 
 ```bash
-brew install --cask --no-quarantine jverhoeks/tap/convey   # Convey.app + `convey` CLI
+brew install --cask jverhoeks/tap/convey          # Convey.app + `convey` CLI
+xattr -dr com.apple.quarantine /Applications/Convey.app   # releases aren't notarized yet
 ```
+
+Releases are ad-hoc signed, so after each `brew upgrade` macOS forgets the
+Screen Recording grant: switch Convey off and on again in System Settings.
 
 Or build and install from source: `make install` puts Convey.app in `/Applications`
 (`APP_DIR=~/Applications` to change it) and links `convey` into `/usr/local/bin`,

@@ -84,8 +84,8 @@ and stapled automatically; without them the release stays ad-hoc:
 | `APPLE_TEAM_ID` | 10-character team ID |
 | `APPLE_APP_PASSWORD` | app-specific password from appleid.apple.com |
 
-Once releases are notarized, drop the quarantine caveat from
-`Packaging/convey.rb.tmpl` and the `--no-quarantine` install hint in the README.
+Once releases are notarized, drop the quarantine and re-grant caveats from
+`Packaging/convey.rb.tmpl` and the `xattr` install hint in the README.
 
 Apple references: [Developer ID](https://developer.apple.com/developer-id/),
 [notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).
