@@ -34,6 +34,13 @@ cp "$bin_dir/convey-app" "$bin_dir/convey" "$app/Contents/MacOS/"
 cp -R "$bin_dir/Convey_ConveyCore.bundle" "$app/Contents/Resources/"
 cp Packaging/Convey.icns "$app/Contents/Resources/"
 sed "s/@VERSION@/$version/g" Packaging/Info.plist > "$app/Contents/Info.plist"
+if [[ -n "${BUNDLE_ID:-}" ]]; then  # dev builds: separate identity for TCC, Launch Services and Login Items
+    plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$app/Contents/Info.plist"
+fi
+if [[ -n "${APP_NAME:-}" ]]; then
+    plutil -replace CFBundleName -string "$APP_NAME" "$app/Contents/Info.plist"
+    plutil -replace CFBundleDisplayName -string "$APP_NAME" "$app/Contents/Info.plist"
+fi
 plutil -lint "$app/Contents/Info.plist"
 
 signing=(--force --sign "$identity")
@@ -48,4 +55,8 @@ codesign --verify --deep --strict "$app"
 rm -rf Convey.app
 mv "$app" Convey.app
 rmdir "$stage"
+# Same bundle id as an installed Convey but a different signature: if LaunchServices knows
+# this copy, System Settings may record the Screen Recording grant against it, and the
+# installed app then fails TCC's code-requirement check on every launch. `open` re-registers it.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$PWD/Convey.app" 2>/dev/null || true
 echo "Built Convey.app ($version), signing identity: $identity"

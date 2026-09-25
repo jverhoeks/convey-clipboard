@@ -36,9 +36,9 @@ DEV_IDENTITY := $(shell security find-certificate -c "Convey Development" >/dev/
 dev-cert: ## One-time: create the local "Convey Development" signing identity used by `make run`
 	bash Packaging/dev-cert.sh
 
-run: ## Build and launch the app bundle (correct icon and permission identity)
-	$(MAKE) bundle CONFIGURATION=debug ARCHS=$$(uname -m) CODE_SIGN_IDENTITY="$(DEV_IDENTITY)"
-	@pkill -f "$(CURDIR)/Convey.app/Contents/MacOS/convey-app" 2>/dev/null || true
+run: ## Build and launch "Convey Dev" (own bundle id + stable signature, so it never steals the brew app's grants)
+	$(MAKE) bundle CONFIGURATION=debug ARCHS=$$(uname -m) CODE_SIGN_IDENTITY="$(DEV_IDENTITY)" BUNDLE_ID=org.verhoeks.convey.dev APP_NAME="Convey Dev"
+	@pkill -x convey-app 2>/dev/null && sleep 1 || true  # one Convey at a time (shared lock, hotkeys, socket)
 	open Convey.app
 
 screenshots: ## Render the README images into docs/images (sample data only; does not touch history)
@@ -51,7 +51,7 @@ VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
 APP := Convey.app
 
 bundle: ## Build a fresh universal app; optional BIN_DIR for explicit prebuilt products
-	SWIFT="$(SWIFT)" VERSION="$(or $(VERSION),0.0.0)" BIN_DIR="$(BIN_DIR)" CONFIGURATION="$(or $(CONFIGURATION),release)" ARCHS="$(or $(ARCHS),arm64 x86_64)" CODE_SIGN_IDENTITY="$(or $(CODE_SIGN_IDENTITY),-)" bash Packaging/bundle.sh
+	SWIFT="$(SWIFT)" VERSION="$(or $(VERSION),0.0.0)" BIN_DIR="$(BIN_DIR)" CONFIGURATION="$(or $(CONFIGURATION),release)" ARCHS="$(or $(ARCHS),arm64 x86_64)" CODE_SIGN_IDENTITY="$(or $(CODE_SIGN_IDENTITY),-)" BUNDLE_ID="$(BUNDLE_ID)" APP_NAME="$(APP_NAME)" bash Packaging/bundle.sh
 
 icon: ## Regenerate the complete macOS icon from vector source
 	$(SWIFT) Packaging/GenerateIcon.swift .build/Convey.iconset
