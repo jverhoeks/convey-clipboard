@@ -16,6 +16,26 @@ struct PickerView: View {
     let onCapture: (CaptureAction) -> Void
     let cache: PreviewCache
 
+    /// Type filter; empty = show everything.
+    @State private var selected: Set<EntryCategory> = []
+
+    private var visibleEntries: [ClipboardEntry] { EntryCategory.filter(history.entries, selected: selected) }
+
+    private func chip(_ category: EntryCategory) -> some View {
+        let isOn = selected.contains(category)
+        return Button {
+            if isOn { selected.remove(category) } else { selected.insert(category) }
+        } label: {
+            Text(category.label)
+                .font(.caption)
+                .padding(.horizontal, 10).padding(.vertical, 3)
+                .background(Capsule().fill(isOn ? Color.accentColor : Color.secondary.opacity(0.15)))
+                .foregroundStyle(isOn ? Color.white : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -42,7 +62,12 @@ struct PickerView: View {
                 } label: { Image(systemName: "gearshape") }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             }
-            .padding(10)
+            .padding(.horizontal, 10).padding(.top, 10)
+            HStack(spacing: 6) {
+                ForEach(EntryCategory.allCases, id: \.self) { chip($0) }
+                Spacer()
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
             Divider()
             ScrollView {
                 LazyVStack(spacing: 8) {
@@ -50,8 +75,12 @@ struct PickerView: View {
                         Text("Clipboard history is empty.\nCopy something to get started.")
                             .font(.callout).foregroundStyle(.secondary)
                             .multilineTextAlignment(.center).padding(.top, 40)
+                    } else if visibleEntries.isEmpty {
+                        Text("No items match the filter.")
+                            .font(.callout).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center).padding(.top, 40)
                     }
-                    ForEach(history.entries) { entry in
+                    ForEach(visibleEntries) { entry in
                         EntryRowView(
                             entry: entry,
                             targets: targetsFor(entry),

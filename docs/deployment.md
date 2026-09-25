@@ -1,7 +1,8 @@
 # Deployment
 
-The local candidate is version **0.2.0**, prepared after the existing `v0.1.0`
-tag. Preparing it does not create a tag, commit, or public release.
+Releases are cut from `main` with `make patch|minor|major` (see the README). v0.2.0
+adds screen recording, the agent control CLI, terminal recording, and
+pixel-exact captures.
 
 ## Local build and verification
 
@@ -38,7 +39,20 @@ LaunchAgent written by older builds. Settings from the old
 `com.jverhoeks.convey` domain are copied over on first launch.
 
 Ad-hoc signatures change with every build, so macOS forgets the Screen Recording
-and menu-bar grants after each rebuild. A Developer ID signature fixes this.
+grant after each rebuild, and for users after each **upgrade**. Locally, `make
+dev-cert` plus `make run` / `make install` sign with a stable self-signed
+identity instead. For releases, a Developer ID signature fixes it (below).
+
+`make install` builds a native bundle, replaces the *contents* of
+`/Applications/Convey.app` (deleting an app there needs App Management
+permission), and links `/usr/local/bin/convey` to the CLI inside the app. That
+link step is the only one that may ask for sudo. The CLI must run from inside the
+app bundle: a copied binary can't find its Mermaid resources.
+
+Command-line control (`convey windows|shot|record|stop|status`) listens on
+`~/Library/Application Support/Convey/control.sock`. It's off by default (the
+`controlEnabled` preference); when on, any process running as this user can
+capture the screen through Convey's permission.
 
 ## Signing and public release
 

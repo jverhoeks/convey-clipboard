@@ -10,8 +10,10 @@ This repository ships:
 - **ConveyCore** — a headless Swift package: flavor detection, a composable
   conversion graph, and converters for HTML↔Markdown, RTF→Markdown,
   image→text (on-device OCR), image→base64 data-URI, and Mermaid→SVG/PNG.
-- **convey** — a CLI over the core.
-- **Convey.app** — a menu-bar clipboard history, screenshot tool, and editor.
+- **convey** — a CLI over the core. It also records terminal sessions as
+  asciicast, and drives the running app from scripts and AI agents.
+- **Convey.app** — a menu-bar clipboard history, screenshot and screen-recording
+  tool, and editor.
 
 ## CLI usage
 
@@ -55,14 +57,14 @@ and writable only by you, and the app also refuses connections from other users.
 
 ## Menu-bar app
 
-Run: `make dev-cert` once, then `make run`. `dev-cert` creates a self-signed
-"Convey Development" signing identity in your login keychain. Without it the
-bundle is ad-hoc signed, so its identity changes with every build and macOS
-silently drops the Screen Recording grant after each rebuild. It rebuilds the app, quits an older instance launched from this
-checkout, and opens the fresh bundle so macOS sees the Convey icon and bundle
-identity in permission UI.
+Run: `make dev-cert` once, then `make run`. `make run` rebuilds the app, quits a
+running copy, and opens the fresh bundle, so macOS sees the Convey icon and bundle
+identity in permission UI. `dev-cert` creates a self-signed "Convey Development"
+signing identity in your login keychain. Without it the bundle is ad-hoc signed,
+so its identity changes with every build, and macOS drops the Screen Recording
+grant after each rebuild.
 
-<img src="docs/images/history.png" width="380" alt="Clipboard history. Rows show a type badge, a preview, remove, and an actions menu. A Mermaid diagram is rendered in place, and a credential is concealed.">
+<img src="docs/images/history.png" width="380" alt="Clipboard history. The header has capture and record buttons and HTML/Text/Image filter chips. Rows show a type badge, a preview, remove, and an actions menu. A Mermaid diagram is rendered in place, and a credential is concealed.">
 
 A menu-bar clipboard icon opens a visual clipboard list. Each entry shows a type
 badge, a preview (text snippet / image thumbnail), and the valid convert
@@ -70,6 +72,8 @@ options for that entry — click one to rewrite the clipboard, then ⌘V. Press
 ⌥⌘V to open the picker from anywhere. History persists across launches;
 password-manager entries (concealed/transient) are never captured.
 The circled × beside a row's type label removes that entry and persists the change.
+The HTML / Text / Image chips under the header filter the list. Select several
+to combine them, or none to show everything.
 
 Screenshots (Greenshot-style): ⇧⌘0 full screen, ⇧⌘1 area, ⇧⌘2 then click a window
 (Escape cancels). The PNG
@@ -84,15 +88,21 @@ The MP4 (H.264; HEVC above 4096 px) is saved next to screenshots, revealed in
 Finder, and put on the clipboard as a file, so it pastes into Mail, Slack, or
 Messages. The picker's header has the same six actions as buttons: capture area, window,
 and screen, then record area, window, and screen (in red). Hover a button to see
-its hotkey. Right-clicking the menu-bar icon lists them too. The gear in the picker opens
-Preferences: rebind hotkeys, filename prefix, folder, copy/save toggles,
-start on login (LaunchAgent), and a button to grant Screen Recording.
+its hotkey. Right-clicking the menu-bar icon lists them too.
 
-<img src="docs/images/preferences.png" width="440" alt="Preferences: start on login, global hotkeys, and where screenshots are copied and saved.">
+The gear in the picker opens Preferences: rebind hotkeys, filename prefix,
+folder, copy/save/editor toggles, start on login (a Login Item), command-line
+control, and the Screen Recording status. If permission is missing, Convey
+registers itself with macOS and offers **Open System Settings** and **Quit &
+Reopen**. macOS then needs you to switch Convey on under *Screen & System Audio
+Recording*; no app can switch itself on.
 
-Area capture uses a crosshair cursor with horizontal/vertical guides. Drag in
-any direction and release to capture; Escape cancels. Selections stay within
-the display where the drag started.
+<img src="docs/images/preferences.png" width="440" alt="Preferences: start on login, command-line control, Screen Recording status, screenshot and recording hotkeys, and capture destinations.">
+
+Area capture uses a crosshair cursor with horizontal/vertical guides and a
+pixel-size label. Drag in any direction and release to capture; Escape cancels.
+Selections stay within the display where the drag started. They are snapped to
+whole pixels, so text and 1 px lines are copied 1:1 instead of resampled.
 
 <img src="docs/images/area-capture.png" width="720" alt="Area capture. Crosshair guides follow the pointer, and the dragged rectangle stays undimmed.">
 
