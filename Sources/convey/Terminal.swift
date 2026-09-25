@@ -19,7 +19,8 @@ func recordTerminal(to path: String?) -> Int32 {
     // posix_spawn, not Process: Process starts the child in its own process group, so `script`
     // is a background job and stops (SIGTTOU) the moment it puts the terminal in raw mode.
     setenv("CONVEY_REC", "1", 1)  // lets a prompt show it's recording
-    let argv = ["/usr/bin/script", "-q", "-r", raw.path, shell].map { strdup($0) } + [nil]
+    let command: [String] = ["/usr/bin/script", "-q", "-r", raw.path, shell]  // typed: older SDKs misread raw.path
+    let argv = command.map { strdup($0) } + [nil]
     defer { argv.forEach { free($0) } }
     fputs("● Recording to \(out.path). Exit the shell (Ctrl-D) to stop.\n", stderr)
     var pid: pid_t = 0, status: Int32 = 0
