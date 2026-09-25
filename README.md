@@ -57,12 +57,12 @@ and writable only by you, and the app also refuses connections from other users.
 
 ## Menu-bar app
 
-Run: `make dev-cert` once, then `make run`. `make run` rebuilds the app, quits a
-running copy, and opens the fresh bundle, so macOS sees the Convey icon and bundle
-identity in permission UI. `dev-cert` creates a self-signed "Convey Development"
-signing identity in your login keychain. Without it the bundle is ad-hoc signed,
-so its identity changes with every build, and macOS drops the Screen Recording
-grant after each rebuild.
+Develop with `make dev-cert` once, then `make run`. It builds **Convey Dev**
+(`org.verhoeks.convey.dev`), signed with a stable self-signed "Convey
+Development" identity from your login keychain. Its Screen Recording grant
+survives rebuilds and is separate from the Homebrew app's. Only one Convey runs
+at a time: `make run` quits the installed one, and `open -a Convey` switches back.
+Preferences and history are shared between the two.
 
 <img src="docs/images/history.png" width="380" alt="Clipboard history. The header has capture and record buttons and HTML/Text/Image filter chips. Rows show a type badge, a preview, remove, and an actions menu. A Mermaid diagram is rendered in place, and a credential is concealed.">
 
